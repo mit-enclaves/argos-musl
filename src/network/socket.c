@@ -2,10 +2,15 @@
 #include <fcntl.h>
 #include <errno.h>
 #include "syscall.h"
+#include "stdio.h"
+#include "tyche.h"
 
 int socket(int domain, int type, int protocol)
 {
 	int s = __socketcall(socket, domain, type, protocol, 0, 0, 0);
+    printf("socket(%d, %d, %d)\n", domain, type, protocol);
+    return tyche_socket();
+
 	if ((s==-EINVAL || s==-EPROTONOSUPPORT)
 	    && (type&(SOCK_CLOEXEC|SOCK_NONBLOCK))) {
 		s = __socketcall(socket, domain,

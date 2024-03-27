@@ -3,11 +3,17 @@
 #include <stdarg.h>
 #include <errno.h>
 #include "syscall.h"
+#include "stdio.h"
+#include "tyche.h"
 
 int fcntl(int fd, int cmd, ...)
 {
 	unsigned long arg;
 	va_list ap;
+    printf("fcntl(%d)\n", fd);
+    if (fd == TYCHE_CONNECTION_FD && (cmd == F_GETFL || cmd == F_SETFL || cmd == F_GETFD || cmd == F_SETFD)) {
+        return tyche_fcntl(fd, cmd);
+    }
 	va_start(ap, cmd);
 	arg = va_arg(ap, unsigned long);
 	va_end(ap);

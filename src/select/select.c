@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <errno.h>
 #include "syscall.h"
+#include "tyche.h"
+#include "stdio.h"
 
 #define IS32BIT(x) !((x)+0x80000000ULL>>32)
 #define CLAMP(x) (int)(IS32BIT(x) ? (x) : 0x7fffffffU+((0ULL+(x))>>63))
@@ -13,6 +15,12 @@ int select(int n, fd_set *restrict rfds, fd_set *restrict wfds, fd_set *restrict
 	suseconds_t us = tv ? tv->tv_usec : 0;
 	long ns;
 	const time_t max_time = (1ULL<<8*sizeof(time_t)-1)-1;
+    int ret;
+    printf("select(nfds: %d, rfds: %p, wfds: %p)\n", n, rfds, wfds);
+    tyche_debug();
+    ret = tyche_select(n, rfds, wfds);
+    printf("return value: %d\n", ret);
+    return ret;
 
 	if (s<0 || us<0) return __syscall_ret(-EINVAL);
 	if (us/1000000 > max_time - s) {
