@@ -18,5 +18,6 @@ int tyche_fcntl(int fd, int flags);
 int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds);
 ssize_t tyche_read(int fd, void *buff, size_t count);
 ssize_t tyche_write(int fd, const void *buf, size_t count);
+pid_t tyche_getpid(void);
 
 #endif

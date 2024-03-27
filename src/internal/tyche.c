@@ -1,6 +1,7 @@
 // Changes to accomodate running on top of Tyche
 #include <fcntl.h>
 #include <errno.h>
+#include "unistd.h"
 #include "stdio.h"
 #include "tyche.h"
 #include "stdlib.h"
@@ -18,6 +19,10 @@ enum tyche_test_state state = TTS_INIT;
 
 void tyche_debug() {
     /* printf("Tyche Debug :)\n"); */
+}
+
+pid_t tyche_getpid() {
+    return 1;
 }
 
 int tyche_socket() {
