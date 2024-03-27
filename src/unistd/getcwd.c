@@ -3,9 +3,11 @@
 #include <limits.h>
 #include <string.h>
 #include "syscall.h"
+#include "tyche.h"
 
 char *getcwd(char *buf, size_t size)
 {
+    return tyche_getcwd(buf, size);
 	char tmp[buf ? 1 : PATH_MAX];
 	if (!buf) {
 		buf = tmp;

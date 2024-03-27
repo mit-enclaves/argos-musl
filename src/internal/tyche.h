@@ -16,8 +16,11 @@ int tyche_listen(int fd);
 int tyche_accept(int fd);
 int tyche_fcntl(int fd, int flags);
 int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds);
-ssize_t tyche_read(int fd, void *buff, size_t count);
-ssize_t tyche_write(int fd, const void *buf, size_t count);
+size_t tyche_read(int fd, void *buff, size_t count);
+size_t tyche_write(int fd, const void *buf, size_t count);
+int tyche_gettimeofday(struct timeval *restrict tv, void *restrict tz);
 pid_t tyche_getpid(void);
+char *tyche_getcwd(char *buf, size_t size);
+int tyche_isatty(int fd);
 
 #endif

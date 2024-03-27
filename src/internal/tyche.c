@@ -25,6 +25,22 @@ pid_t tyche_getpid() {
     return 1;
 }
 
+int tyche_isatty(int fd) {
+    return 1;
+}
+
+char *tyche_getcwd(char *buf, size_t size) {
+    char *pwd = "/tmp/tyche-redis";
+    strncpy(buf, pwd, size);
+    return strdup(pwd);
+}
+
+int tyche_gettimeofday(struct timeval *restrict tv, void *restrict tz) {
+    tv->tv_sec = 0;
+    tv->tv_usec = 0;
+    return 0;
+}
+
 int tyche_socket() {
     // We only support a single socket for now
     return TYCHE_SOCKET_FD;
@@ -122,7 +138,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
 
 #define REDIS_CMD_PING "PING\r\n"
 
-ssize_t tyche_read(int fd, void *buff, size_t count) {
+size_t tyche_read(int fd, void *buff, size_t count) {
     printf("Tyche read: %d, count: %d\n", fd, count);
     switch (state) {
         case TTS_START:
@@ -138,7 +154,7 @@ ssize_t tyche_read(int fd, void *buff, size_t count) {
     return 0;
 }
 
-ssize_t tyche_write(int fd, const void *buf, size_t count) {
+size_t tyche_write(int fd, const void *buf, size_t count) {
     printf("Tyche write:\n  %.*s", count, buf);
     return count;
 }
