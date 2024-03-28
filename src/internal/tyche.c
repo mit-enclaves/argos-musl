@@ -270,3 +270,28 @@ int tyche_munmap(void *start, size_t len) {
     // TODO: insert a new node here.
     return 0;
 }
+
+#define BRK_NB_PAGES 20
+static char brk_pool[BRK_NB_PAGES * PAGE_SIZE];
+static char *brk_cursor;
+static int brk_is_init = 0;
+
+size_t tyche_brk(void *end) {
+    // Initialize if needed
+    if (!brk_is_init) {
+        brk_cursor = brk_pool;
+        brk_is_init = 1;
+    }
+
+    if (end == NULL) {
+        return (size_t)brk_cursor;
+    }
+
+    if ((size_t)end > (size_t)brk_pool + BRK_NB_PAGES * PAGE_SIZE || (size_t)end < (size_t)brk_pool) {
+        printf("Invalid brk!!!\n");
+        return -ENOMEM;
+    } else {
+        brk_cursor = end;
+        return (size_t)end;
+    }
+}

@@ -12,6 +12,7 @@
 #include "libc.h"
 #include "lock.h"
 #include "dynlink.h"
+#include "tyche.h"
 
 // use macros to appropriately namespace these.
 #define size_classes __malloc_size_classes
@@ -31,7 +32,8 @@
 #define assert(x) do { if (!(x)) a_crash(); } while(0)
 #endif
 
-#define brk(p) ((uintptr_t)__syscall(SYS_brk, p))
+/* #define brk(p) ((uintptr_t)__syscall(SYS_brk, p)) */
+#define brk(p) (tyche_brk((void *)p))
 
 #define mmap __mmap
 #define madvise __madvise
