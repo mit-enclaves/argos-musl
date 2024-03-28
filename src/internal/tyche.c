@@ -179,6 +179,10 @@ static char mempool[NB_PAGES * PAGE_SIZE];
 static mem_segment_t* mempool_head;
 static int mempool_is_init = 0;
 
+static size_t align_page_up(size_t val) {
+    return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
+}
+
 static void update_linked_list(mem_segment_t *node, mem_segment_t *prev, size_t len) {
     mem_segment_t *next = node->next;
 
@@ -208,7 +212,7 @@ static void *alloc_segment(size_t len) {
     }
 
     // Align size to next page size multiple
-    len = (len + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
+    len = align_page_up(len);
 
     mem_segment_t *node = mempool_head;
     mem_segment_t *prev = NULL;
@@ -243,27 +247,26 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
     }
 
     return alloc_segment(len);
+}
 
-    // TODO: Just the old implementation for now
-    long ret;
-	if (off & OFF_MASK) {
-		errno = EINVAL;
-		return MAP_FAILED;
-	}
-	if (len >= PTRDIFF_MAX) {
-		errno = ENOMEM;
-		return MAP_FAILED;
-	}
-	if (flags & MAP_FIXED) {
-		__vm_wait();
-	}
-#ifdef SYS_mmap2
-	ret = __syscall(SYS_mmap2, start, len, prot, flags, fd, off/UNIT);
-#else
-	ret = __syscall(SYS_mmap, start, len, prot, flags, fd, off);
-#endif
-	/* Fixup incorrect EPERM from kernel. */
-	if (ret == -EPERM && !start && (flags&MAP_ANON) && !(flags&MAP_FIXED))
-		ret = -ENOMEM;
-	return (void *)__syscall_ret(ret);
+int tyche_munmap(void *start, size_t len) {
+    len = align_page_up(len);
+
+    if (align_page_up((size_t)start) != (size_t)start) {
+        printf("Invalid unmap: 0x%lx is not page-aligned\n", (size_t)start);
+        return 0;
+    }
+
+    // For now munmap is left unimplemented, this wastes a lot of memory though...
+    return 0;
+
+    mem_segment_t *node = mempool_head;
+    mem_segment_t *prev = NULL;
+    while (node != NULL && (size_t)node < (size_t)start) {
+        prev = node;
+        node = node->next;
+    }
+
+    // TODO: insert a new node here.
+    return 0;
 }

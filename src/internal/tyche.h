@@ -3,6 +3,7 @@
 #ifndef	_TYCHE_H
 #define	_TYCHE_H	1
 
+#include <unistd.h>
 #include "sys/select.h"
 
 #define TYCHE_SOCKET_FD 14
@@ -23,5 +24,6 @@ pid_t tyche_getpid(void);
 char *tyche_getcwd(char *buf, size_t size);
 int tyche_isatty(int fd);
 void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off);
+int tyche_munmap(void *start, size_t len);
 
 #endif
