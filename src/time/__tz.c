@@ -366,7 +366,7 @@ void __secs_to_zone(long long t, int local, int *isdst, long *offset, long *oppo
 {
 	LOCK(lock);
 
-	do_tzset();
+	/* do_tzset(); */
 
 	if (zi) {
 		size_t alt, i = scan_trans(t, local, &alt);
@@ -420,7 +420,7 @@ dst:
 static void __tzset()
 {
 	LOCK(lock);
-	do_tzset();
+	/* do_tzset(); */
 	UNLOCK(lock);
 }
 
@@ -430,7 +430,7 @@ const char *__tm_to_tzname(const struct tm *tm)
 {
 	const void *p = tm->__tm_zone;
 	LOCK(lock);
-	do_tzset();
+	/* do_tzset(); */
 	if (p != __utc && p != __tzname[0] && p != __tzname[1] &&
 	    (!zi || (uintptr_t)p-(uintptr_t)abbrevs >= abbrevs_end - abbrevs))
 		p = "";
