@@ -7,9 +7,9 @@
 
 int socket(int domain, int type, int protocol)
 {
-	int s = __socketcall(socket, domain, type, protocol, 0, 0, 0);
     printf("socket(%d, %d, %d)\n", domain, type, protocol);
     return tyche_socket();
+	int s = __socketcall(socket, domain, type, protocol, 0, 0, 0);
 
 	if ((s==-EINVAL || s==-EPROTONOSUPPORT)
 	    && (type&(SOCK_CLOEXEC|SOCK_NONBLOCK))) {

@@ -22,5 +22,6 @@ int tyche_gettimeofday(struct timeval *restrict tv, void *restrict tz);
 pid_t tyche_getpid(void);
 char *tyche_getcwd(char *buf, size_t size);
 int tyche_isatty(int fd);
+void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off);
 
 #endif

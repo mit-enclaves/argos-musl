@@ -1,11 +1,16 @@
 // Changes to accomodate running on top of Tyche
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/mman.h>
+#include <errno.h>
+#include <stdint.h>
+#include <limits.h>
 #include "unistd.h"
 #include "stdio.h"
 #include "tyche.h"
 #include "stdlib.h"
 #include "string.h"
+#include "syscall.h"
 
 enum tyche_test_state {
     TTS_INIT,
@@ -157,4 +162,108 @@ size_t tyche_read(int fd, void *buff, size_t count) {
 size_t tyche_write(int fd, const void *buf, size_t count) {
     printf("Tyche write:\n  %.*s", count, buf);
     return count;
+}
+
+#define UNIT SYSCALL_MMAP2_UNIT
+#define OFF_MASK ((-0x2000ULL << (8*sizeof(syscall_arg_t)-1)) | (UNIT-1))
+
+#define PAGE_SIZE (0x1000)
+#define NB_PAGES  (800)
+
+typedef struct mem_segment {
+    size_t len;
+    struct mem_segment *next;
+} mem_segment_t;
+
+static char mempool[NB_PAGES * PAGE_SIZE];
+static mem_segment_t* mempool_head;
+static int mempool_is_init = 0;
+
+static void update_linked_list(mem_segment_t *node, mem_segment_t *prev, size_t len) {
+    mem_segment_t *next = node->next;
+
+    // Create a new node if needed
+    if (node->len > len) {
+        mem_segment_t *new_node = (mem_segment_t *)(((char *)node) + len);
+        new_node->len = node->len - len;
+        new_node->next = node->next;
+        next = new_node;
+    }
+
+    if (prev != NULL) {
+        prev->next = next;
+    } else {
+        mempool_head = next;
+    }
+}
+
+static void *alloc_segment(size_t len) {
+    // Initialize mempool if not already done
+    if (!mempool_is_init) {
+        mem_segment_t *head = (mem_segment_t *)mempool;
+        head->len = NB_PAGES * PAGE_SIZE;
+        head->next = NULL;
+        mempool_head = head;
+        mempool_is_init = 1;
+    }
+
+    // Align size to next page size multiple
+    len = (len + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
+
+    mem_segment_t *node = mempool_head;
+    mem_segment_t *prev = NULL;
+    while (node != NULL) {
+        if (node->len >= len) {
+            // Node is big enough, allocating memory
+            update_linked_list(node, prev, len);
+            /* printf("mmap segment [0x%lx, 0x%lx]\n", (size_t)node, (size_t)node + len); */
+            return (void*)node;
+        }
+
+        // Else move on to next node
+        prev = node;
+        node = node->next;
+    }
+
+    // Running out of space!
+    printf("Running out of mmap-able space!!!");
+    return NULL;
+}
+
+void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off) {
+    // We just ignore PROT_NONE as it is used only for guard pages
+    if (prot == PROT_NONE) {
+        return start;
+    }
+
+    // Print a warning if we are mapping a file, this is not supported!
+    if (fd != -1) {
+        printf("ERROR: mmap-ing a file!\n");
+        return NULL;
+    }
+
+    return alloc_segment(len);
+
+    // TODO: Just the old implementation for now
+    long ret;
+	if (off & OFF_MASK) {
+		errno = EINVAL;
+		return MAP_FAILED;
+	}
+	if (len >= PTRDIFF_MAX) {
+		errno = ENOMEM;
+		return MAP_FAILED;
+	}
+	if (flags & MAP_FIXED) {
+		__vm_wait();
+	}
+#ifdef SYS_mmap2
+	ret = __syscall(SYS_mmap2, start, len, prot, flags, fd, off/UNIT);
+#else
+	ret = __syscall(SYS_mmap, start, len, prot, flags, fd, off);
+#endif
+	/* Fixup incorrect EPERM from kernel. */
+	if (ret == -EPERM && !start && (flags&MAP_ANON) && !(flags&MAP_FIXED))
+		ret = -ENOMEM;
+	return (void *)__syscall_ret(ret);
 }
