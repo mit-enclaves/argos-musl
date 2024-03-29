@@ -1,6 +1,12 @@
 #include "stdio_impl.h"
+#include "tyche.h"
 
 #undef stdout
+
+size_t _tyche_stdout_write(FILE *f, const unsigned char *buf, size_t len) {
+    // Just drop the text
+    return len;
+}
 
 static unsigned char buf[BUFSIZ+UNGET];
 hidden FILE __stdout_FILE = {
@@ -9,7 +15,11 @@ hidden FILE __stdout_FILE = {
 	.fd = 1,
 	.flags = F_PERM | F_NORD,
 	.lbf = '\n',
+#ifdef TYCHE_NO_SYSCALL
+    .write = _tyche_stdout_write,
+#else
 	.write = __stdout_write,
+#endif
 	.seek = __stdio_seek,
 	.close = __stdio_close,
 	.lock = -1,
