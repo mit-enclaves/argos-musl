@@ -75,6 +75,18 @@ int tyche_listen(int fd) {
 }
 
 int tyche_accept(int fd) {
+    // Initialize read queue so that the socket has some content
+    if (!read_queue_is_init) {
+        memset(read_queue_buff, 0, sizeof(char) * RB_SIZE);
+        rb_char_init(&read_queue, RB_SIZE, read_queue_buff);
+        read_queue_is_init = 1;
+
+        // Put initial commands
+        char *cmds = "PING\r\nSET A 10\r\nGET A\r\n";
+        printf("Commands:\n%s", cmds);
+        rb_char_write_n(&read_queue, strlen(cmds), cmds);
+    }
+
     if (!connection_accepted) {
         printf("Accepting connection\n");
         connection_accepted = 1;
@@ -128,58 +140,47 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
         // Set the bit for the Tyche socket
         FD_SET(TYCHE_SOCKET_FD, rfds);
         connection_selected = 1;
+        printf("Connection ready to accept\n");
+        return 1;
     } else {
-        switch (state) {
-            case TTS_INIT:
-                FD_SET(TYCHE_CONNECTION_FD, rfds);
-                state = TTS_START;
-                break;
-            default:
-                printf("Done testing, blocking on select\n");
+        unsigned long long count = 0;
+        while (rb_char_is_empty(&read_queue)) {
+            count += 1;
+            if (count > 1000000) {
+                printf("No more messages, exiting\n");
                 while (1) {
                     exit(0);
                 }
-                break;
+            }
         }
+        // We got some messages on the channel!
+        FD_SET(TYCHE_CONNECTION_FD, rfds);
+        printf("Channel ready to be read\n");
+        return 1;
+        /* switch (state) { */
+        /*     case TTS_INIT: */
+        /*         FD_SET(TYCHE_CONNECTION_FD, rfds); */
+        /*         state = TTS_START; */
+        /*         break; */
+        /*     default: */
+        /*         printf("Done testing, blocking on select\n"); */
+        /*         while (1) { */
+        /*             exit(0); */
+        /*         } */
+        /*         break; */
+        /* } */
     }
-
-    printf("Returning from select\n");
-    /* exit(0); */
-    return 1;
 }
-
-#define REDIS_CMD_PING "PING\r\n"
 
 size_t tyche_read(int fd, void *buff, size_t count) {
     printf("Tyche read: %d, count: %d\n", fd, count);
 
-    if (!read_queue_is_init) {
-        memset(read_queue_buff, 0, sizeof(char) * RB_SIZE);
-        rb_char_init(&read_queue, RB_SIZE, read_queue_buff);
-        read_queue_is_init = 1;
-
-        // Put initial commands
-        char *cmds = "PING\r\nSET A 10\r\nGET A\r\n";
-        printf("Commands:\n%s", cmds);
-        rb_char_write_n(&read_queue, strlen(cmds), cmds);
+    int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
+    if (ret == FAILURE) {
+        errno = EAGAIN;
+        return 0;
     }
-
-    switch (state) {
-        case TTS_START:
-            char *cmd = REDIS_CMD_PING;
-            state = TTS_DONE;
-            int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
-            if (ret == FAILURE) {
-                errno = EAGAIN;
-                return 0;
-            } else {
-                return ret;
-            }
-        default:
-            printf("Done reading\n");
-            break;
-    }
-    return 0;
+    return ret;
 }
 
 size_t tyche_write(int fd, const void *buf, size_t count) {
