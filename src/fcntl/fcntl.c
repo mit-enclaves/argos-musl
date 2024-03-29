@@ -2,9 +2,9 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <errno.h>
+#include "tyche.h"
 #include "syscall.h"
 #include "stdio.h"
-#include "tyche.h"
 
 int fcntl(int fd, int cmd, ...)
 {
