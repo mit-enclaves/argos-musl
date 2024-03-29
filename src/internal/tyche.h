@@ -3,11 +3,11 @@
 #ifndef	_TYCHE_H
 #define	_TYCHE_H	1
 
-#include <unistd.h>
+#include "unistd.h"
 #include "sys/select.h"
 
 // Comment/uncomment to enable or disable syscalls
-#define TYCHE_NO_SYSCALL
+/* #define TYCHE_NO_SYSCALL */
 
 #define TYCHE_SOCKET_FD 14
 #define TYCHE_CONNECTION_FD 15

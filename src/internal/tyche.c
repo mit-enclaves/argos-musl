@@ -11,6 +11,13 @@
 #include "stdlib.h"
 #include "string.h"
 #include "syscall.h"
+#include "tyche_rb.h"
+
+#define RB_SIZE 100
+RB_DECLARE_ALL(char);
+static char read_queue_buff[RB_SIZE];
+static rb_char_t read_queue;
+static int read_queue_is_init = 0;
 
 enum tyche_test_state {
     TTS_INIT,
@@ -145,13 +152,29 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
 
 size_t tyche_read(int fd, void *buff, size_t count) {
     printf("Tyche read: %d, count: %d\n", fd, count);
+
+    if (!read_queue_is_init) {
+        memset(read_queue_buff, 0, sizeof(char) * RB_SIZE);
+        rb_char_init(&read_queue, RB_SIZE, read_queue_buff);
+        read_queue_is_init = 1;
+
+        // Put initial commands
+        char *cmds = "PING\r\nSET A 10\r\nGET A\r\n";
+        printf("Commands:\n%s", cmds);
+        rb_char_write_n(&read_queue, strlen(cmds), cmds);
+    }
+
     switch (state) {
         case TTS_START:
             char *cmd = REDIS_CMD_PING;
             state = TTS_DONE;
-            strcpy(buff, cmd);
-            printf("  %s", cmd);
-            return strlen(cmd);
+            int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
+            if (ret == FAILURE) {
+                errno = EAGAIN;
+                return 0;
+            } else {
+                return ret;
+            }
         default:
             printf("Done reading\n");
             break;
@@ -164,8 +187,7 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
     return count;
 }
 
-#define UNIT SYSCALL_MMAP2_UNIT
-#define OFF_MASK ((-0x2000ULL << (8*sizeof(syscall_arg_t)-1)) | (UNIT-1))
+// ——————————————————————————— Memory Management ———————————————————————————— //
 
 #define PAGE_SIZE (0x1000)
 #define NB_PAGES  (800)
