@@ -13,11 +13,31 @@
 #include "syscall.h"
 #include "tyche_rb.h"
 
-#define RB_SIZE 100
+
 RB_DECLARE_ALL(char);
-static char read_queue_buff[RB_SIZE];
-static rb_char_t read_queue;
-static int read_queue_is_init = 0;
+
+#define MSG_BUFFER_SIZE 1048
+
+/// The redis enclave shared memory gets typecasted to this.
+typedef struct redis_app_t {
+  // Sending things to redis.
+  rb_char_t to_redis;
+  // Receiving messages from redis.
+  rb_char_t from_redis;
+  // Buffer for the to_redis.
+  char to_buffer[MSG_BUFFER_SIZE];
+  // Buffer for the from_redis.
+  char from_buffer[MSG_BUFFER_SIZE];
+} redis_app_t;
+
+
+//static char read_queue_buff[RB_SIZE];
+//static rb_char_t read_queue;
+
+// This is all part of the shared state introduced by tychools.
+// The untrusted code is responsible for initializing the channels.
+static redis_app_t * app = (redis_app_t*) TYCHE_SHARED_ADDR;
+static int read_queue_is_init = 1;
 
 enum tyche_test_state {
     TTS_INIT,
@@ -76,7 +96,7 @@ int tyche_listen(int fd) {
 
 int tyche_accept(int fd) {
     // Initialize read queue so that the socket has some content
-    if (!read_queue_is_init) {
+    /*if (!read_queue_is_init) {
         memset(read_queue_buff, 0, sizeof(char) * RB_SIZE);
         rb_char_init(&read_queue, RB_SIZE, read_queue_buff);
         read_queue_is_init = 1;
@@ -85,7 +105,7 @@ int tyche_accept(int fd) {
         char *cmds = "PING\r\nSET A 10\r\nGET A\r\n";
         printf("Commands:\n%s", cmds);
         rb_char_write_n(&read_queue, strlen(cmds), cmds);
-    }
+    }*/
 
     if (!connection_accepted) {
         printf("Accepting connection\n");
@@ -144,14 +164,14 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
         return 1;
     } else {
         unsigned long long count = 0;
-        while (rb_char_is_empty(&read_queue)) {
-            count += 1;
+        while (rb_char_is_empty(&(app->to_redis))) {
+            /*count += 1;
             if (count > 1000000) {
                 printf("No more messages, exiting\n");
                 while (1) {
                     exit(0);
                 }
-            }
+            }*/
         }
         // We got some messages on the channel!
         FD_SET(TYCHE_CONNECTION_FD, rfds);
@@ -175,7 +195,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
 size_t tyche_read(int fd, void *buff, size_t count) {
     printf("Tyche read: %d, count: %d\n", fd, count);
 
-    int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
+    int ret = rb_char_read_n(&(app->to_redis), (int) count, (char *)buff);
     if (ret == FAILURE) {
         errno = EAGAIN;
         return 0;
@@ -184,7 +204,17 @@ size_t tyche_read(int fd, void *buff, size_t count) {
 }
 
 size_t tyche_write(int fd, const void *buf, size_t count) {
-    printf("Tyche write:\n  %.*s", count, buf);
+    //printf("Tyche write:\n  %.*s", count, buf);
+    int written = 0;
+    char *source = (char *) buf;
+    while (written < count) {
+      int res = rb_char_write_n(&(app->from_redis), count - written, &source[written]);
+      if (res == FAILURE) {
+        //TODO: figure something out.
+        return 0;
+      }
+      written += res;
+    }
     return count;
 }
 
