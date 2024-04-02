@@ -13,7 +13,7 @@
 #define TYCHE_CONNECTION_FD 15
 #define TYCHE_SHARED_ADDR 0x300000
 
-void tyche_debug();
+void tyche_debug(unsigned long long marker);
 int tyche_socket();
 int tyche_setsockopt(int fd);
 int tyche_bind(int fd);
