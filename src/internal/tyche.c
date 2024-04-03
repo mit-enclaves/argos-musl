@@ -220,6 +220,7 @@ size_t tyche_read(int fd, void *buff, size_t count) {
   printf("Tyche read: %d, count: %d\n", fd, count);
   int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
 #else
+    tyche_debug(999);
     int ret = rb_char_read_n(&(app->to_redis), (int) count, (char *)buff);
 #endif
     if (ret == FAILURE) {
@@ -252,7 +253,7 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
 #define PAGE_SIZE (0x1000)
 #define NB_PAGES  (800)
 
-static char mempool[NB_PAGES * PAGE_SIZE] = {0};
+static char mempool[NB_PAGES * PAGE_SIZE] __attribute__((aligned(0x1000))) = {0};
 //TODO implement the bitmap.
 //static uint64_t bitmap [NB_PAGES/64 + 1] = {0};
 //For now let's just use a pointer.
