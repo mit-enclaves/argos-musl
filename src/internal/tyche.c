@@ -155,18 +155,18 @@ int tyche_fcntl(int fd, int flags) {
 }
 
 int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
-    printf("Tyche select\n");
+    //printf("Tyche select\n");
 
-    printf("Read set:\n");
+    //printf("Read set:\n");
     for (int i = 0; i < 32; i++) {
         if (FD_ISSET(i, rfds)) {
-            printf("  %d\n", i);
+            //printf("  %d\n", i);
         }
     }
-    printf("Write set:\n");
+    //printf("Write set:\n");
     for (int i = 0; i < 32; i++) {
         if (FD_ISSET(i, wfds)) {
-            printf("  %d\n", i);
+            //printf("  %d\n", i);
         }
     }
 
@@ -178,7 +178,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
         // Set the bit for the Tyche socket
         FD_SET(TYCHE_SOCKET_FD, rfds);
         connection_selected = 1;
-        printf("Connection ready to accept\n");
+        //printf("Connection ready to accept\n");
         return 1;
     } else {
         unsigned long long count = 0;
@@ -198,7 +198,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
 #endif
         // We got some messages on the channel!
         FD_SET(TYCHE_CONNECTION_FD, rfds);
-        printf("Channel ready to be read\n");
+        //printf("Channel ready to be read\n");
         return 1;
         /* switch (state) { */
         /*     case TTS_INIT: */
@@ -220,12 +220,13 @@ size_t tyche_read(int fd, void *buff, size_t count) {
   printf("Tyche read: %d, count: %d\n", fd, count);
   int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
 #else
-    tyche_debug(999);
-    int ret = rb_char_read_n(&(app->to_redis), (int) count, (char *)buff);
+    int ret = rb_char_read_alias_n(&(app->to_redis), app->to_buffer, (int) count, (char *)buff);
 #endif
     if (ret == FAILURE) {
-        errno = EAGAIN;
-        return 0;
+      int *suicide = (int*) 0xdeadbabe;
+      *suicide = 101;
+      errno = EAGAIN;
+      return 0;
     }
     return ret;
 }
@@ -237,9 +238,11 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
     int written = 0;
     char *source = (char *) buf;
     while (written < count) {
-      int res = rb_char_write_n(&(app->from_redis), count - written, &source[written]);
+      int res = rb_char_write_alias_n(&(app->from_redis), app->from_buffer, count - written, &source[written]);
       if (res == FAILURE) {
         //TODO: figure something out.
+        int *suicide = (int *) 0xdeadbabe;
+        *suicide = 100;
         return 0;
       }
       written += res;
