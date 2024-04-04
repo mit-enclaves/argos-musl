@@ -13,11 +13,36 @@
 #include "syscall.h"
 #include "tyche_rb.h"
 
-#define RB_SIZE 100
+
 RB_DECLARE_ALL(char);
+
+#ifndef TYCHE_NO_SYSCALL
+#define RB_SIZE 100
 static char read_queue_buff[RB_SIZE];
 static rb_char_t read_queue;
 static int read_queue_is_init = 0;
+
+#else
+
+#define MSG_BUFFER_SIZE 1048
+
+/// The redis enclave shared memory gets typecasted to this.
+typedef struct redis_app_t {
+  // Sending things to redis.
+  rb_char_t to_redis;
+  // Receiving messages from redis.
+  rb_char_t from_redis;
+  // Buffer for the to_redis.
+  char to_buffer[MSG_BUFFER_SIZE];
+  // Buffer for the from_redis.
+  char from_buffer[MSG_BUFFER_SIZE];
+} redis_app_t;
+
+// This is all part of the shared state introduced by tychools.
+// The untrusted code is responsible for initializing the channels.
+static redis_app_t * app = (redis_app_t*) TYCHE_SHARED_ADDR;
+static int read_queue_is_init = 1;
+#endif
 
 enum tyche_test_state {
     TTS_INIT,
@@ -29,8 +54,18 @@ int connection_accepted = 0;
 int connection_selected = 0;
 enum tyche_test_state state = TTS_INIT;
 
-void tyche_debug() {
-    /* printf("Tyche Debug :)\n"); */
+void tyche_debug(unsigned long long marker) {
+#ifndef TYCHE_NO_SYSCALL
+    printf("Tyche Debug :)\n");
+#else
+  __asm__ __volatile__ (
+      "movq %0, %%rdi\n\t"
+      "movq $10, %%rax\n\t"
+      "vmcall\n\t"
+      :
+      : "rm" (marker)
+      : "rax", "rdi", "memory");
+#endif
 }
 
 pid_t tyche_getpid() {
@@ -76,6 +111,8 @@ int tyche_listen(int fd) {
 
 int tyche_accept(int fd) {
     // Initialize read queue so that the socket has some content
+
+#ifndef TYCHE_NO_SYSCALL
     if (!read_queue_is_init) {
         memset(read_queue_buff, 0, sizeof(char) * RB_SIZE);
         rb_char_init(&read_queue, RB_SIZE, read_queue_buff);
@@ -86,6 +123,7 @@ int tyche_accept(int fd) {
         printf("Commands:\n%s", cmds);
         rb_char_write_n(&read_queue, strlen(cmds), cmds);
     }
+#endif
 
     if (!connection_accepted) {
         printf("Accepting connection\n");
@@ -117,18 +155,18 @@ int tyche_fcntl(int fd, int flags) {
 }
 
 int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
-    printf("Tyche select\n");
+    //printf("Tyche select\n");
 
-    printf("Read set:\n");
+    //printf("Read set:\n");
     for (int i = 0; i < 32; i++) {
         if (FD_ISSET(i, rfds)) {
-            printf("  %d\n", i);
+            //printf("  %d\n", i);
         }
     }
-    printf("Write set:\n");
+    //printf("Write set:\n");
     for (int i = 0; i < 32; i++) {
         if (FD_ISSET(i, wfds)) {
-            printf("  %d\n", i);
+            //printf("  %d\n", i);
         }
     }
 
@@ -140,11 +178,13 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
         // Set the bit for the Tyche socket
         FD_SET(TYCHE_SOCKET_FD, rfds);
         connection_selected = 1;
-        printf("Connection ready to accept\n");
+        //printf("Connection ready to accept\n");
         return 1;
     } else {
         unsigned long long count = 0;
-        while (rb_char_is_empty(&read_queue)) {
+
+#ifndef TYCHE_NO_SYSCALL
+        while(rb_char_is_empty(&read_queue)) {
             count += 1;
             if (count > 1000000) {
                 printf("No more messages, exiting\n");
@@ -153,9 +193,12 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
                 }
             }
         }
+#else
+        while (rb_char_is_empty(&(app->to_redis))) {}
+#endif
         // We got some messages on the channel!
         FD_SET(TYCHE_CONNECTION_FD, rfds);
-        printf("Channel ready to be read\n");
+        //printf("Channel ready to be read\n");
         return 1;
         /* switch (state) { */
         /*     case TTS_INIT: */
@@ -173,18 +216,38 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
 }
 
 size_t tyche_read(int fd, void *buff, size_t count) {
-    printf("Tyche read: %d, count: %d\n", fd, count);
-
-    int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
+#ifndef TYCHE_NO_SYSCALL
+  printf("Tyche read: %d, count: %d\n", fd, count);
+  int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
+#else
+    int ret = rb_char_read_alias_n(&(app->to_redis), app->to_buffer, (int) count, (char *)buff);
+#endif
     if (ret == FAILURE) {
-        errno = EAGAIN;
-        return 0;
+      int *suicide = (int*) 0xdeadbabe;
+      *suicide = 101;
+      errno = EAGAIN;
+      return 0;
     }
     return ret;
 }
 
 size_t tyche_write(int fd, const void *buf, size_t count) {
+#ifndef TYCHE_NO_SYSCALL
     printf("Tyche write:\n  %.*s", count, buf);
+#else
+    int written = 0;
+    char *source = (char *) buf;
+    while (written < count) {
+      int res = rb_char_write_alias_n(&(app->from_redis), app->from_buffer, count - written, &source[written]);
+      if (res == FAILURE) {
+        //TODO: figure something out.
+        int *suicide = (int *) 0xdeadbabe;
+        *suicide = 100;
+        return 0;
+      }
+      written += res;
+    }
+#endif
     return count;
 }
 
@@ -193,68 +256,31 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
 #define PAGE_SIZE (0x1000)
 #define NB_PAGES  (800)
 
-typedef struct mem_segment {
-    size_t len;
-    struct mem_segment *next;
-} mem_segment_t;
-
-static char mempool[NB_PAGES * PAGE_SIZE];
-static mem_segment_t* mempool_head;
+static char mempool[NB_PAGES * PAGE_SIZE] __attribute__((aligned(0x1000))) = {0};
+//TODO implement the bitmap.
+//static uint64_t bitmap [NB_PAGES/64 + 1] = {0};
+//For now let's just use a pointer.
+static int mempool_next_free = 0;
 static int mempool_is_init = 0;
 
 static size_t align_page_up(size_t val) {
     return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
 }
 
-static void update_linked_list(mem_segment_t *node, mem_segment_t *prev, size_t len) {
-    mem_segment_t *next = node->next;
-
-    // Create a new node if needed
-    if (node->len > len) {
-        mem_segment_t *new_node = (mem_segment_t *)(((char *)node) + len);
-        new_node->len = node->len - len;
-        new_node->next = node->next;
-        next = new_node;
-    }
-
-    if (prev != NULL) {
-        prev->next = next;
-    } else {
-        mempool_head = next;
-    }
-}
-
 static void *alloc_segment(size_t len) {
-    // Initialize mempool if not already done
-    if (!mempool_is_init) {
-        mem_segment_t *head = (mem_segment_t *)mempool;
-        head->len = NB_PAGES * PAGE_SIZE;
-        head->next = NULL;
-        mempool_head = head;
-        mempool_is_init = 1;
-    }
-
+    void* res = NULL;
+    int nb_pages = 0;
     // Align size to next page size multiple
     len = align_page_up(len);
-
-    mem_segment_t *node = mempool_head;
-    mem_segment_t *prev = NULL;
-    while (node != NULL) {
-        if (node->len >= len) {
-            // Node is big enough, allocating memory
-            update_linked_list(node, prev, len);
-            /* printf("mmap segment [0x%lx, 0x%lx]\n", (size_t)node, (size_t)node + len); */
-            return (void*)node;
-        }
-
-        // Else move on to next node
-        prev = node;
-        node = node->next;
+    nb_pages = (len >> 12);
+    if ((mempool_next_free + nb_pages) >= NB_PAGES) {
+      // Running out of memory.
+      int *suicide = (int*) 0xdeadbabe;
+      *suicide = 0xb00b;
     }
-
-    // Running out of space!
-    printf("Running out of mmap-able space!!!");
-    return NULL;
+    res = (void*) &mempool[(mempool_next_free) * PAGE_SIZE];
+    mempool_next_free += nb_pages;
+    return res;
 }
 
 void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off) {
@@ -265,31 +291,16 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
 
     // Print a warning if we are mapping a file, this is not supported!
     if (fd != -1) {
-        printf("ERROR: mmap-ing a file!\n");
-        return NULL;
+      int *suicide = (int *) 0xdeadbabe;
+      *suicide = 0xB00B1;
+      return NULL;
     }
-
-    return alloc_segment(len);
+    void* res = alloc_segment(len);
+    return res;
 }
 
-int tyche_munmap(void *start, size_t len) {
-    len = align_page_up(len);
-
-    if (align_page_up((size_t)start) != (size_t)start) {
-        printf("Invalid unmap: 0x%lx is not page-aligned\n", (size_t)start);
-        return 0;
-    }
-
-    // For now munmap is left unimplemented, this wastes a lot of memory though...
-    return 0;
-
-    mem_segment_t *node = mempool_head;
-    mem_segment_t *prev = NULL;
-    while (node != NULL && (size_t)node < (size_t)start) {
-        prev = node;
-        node = node->next;
-    }
-
+int tyche_munmap(void *start, size_t len) { 
+    //TODO implement.
     // TODO: insert a new node here.
     return 0;
 }
