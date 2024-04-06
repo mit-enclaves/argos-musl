@@ -2,16 +2,10 @@
 
 #define SUCCESS 0
 #define FAILURE -1
-#define RB_NO_ATOMICS 1
 
 // —————————————— Helper functions for atomics vs non-atomics ——————————————— //
 
-#ifdef RB_NO_ATOMICS
 typedef int buff_index_t;
-#else
-#include <stdatomic.h>
-typedef atomic_int buff_index_t;
-#endif
 
 // ——————————————————————————————— Functions ———————————————————————————————— //
 
@@ -19,7 +13,7 @@ static inline void buff_index_store(buff_index_t *dest, buff_index_t value) {
 #ifdef RB_NO_ATOMICS
   *dest = value;
 #else
-  atomic_store(dest, value);
+  __atomic_store_n(dest, value, __ATOMIC_SEQ_CST);
 #endif
 }
 
@@ -27,7 +21,7 @@ static inline buff_index_t buff_index_load(buff_index_t *src) {
 #ifdef RB_NO_ATOMICS
   return *src;
 #else
-  return atomic_load(src);
+  return __atomic_load_n(src, __ATOMIC_SEQ_CST);
 #endif
 }
 
@@ -35,7 +29,7 @@ static inline void buff_index_incr(buff_index_t *dest) {
 #ifdef RB_NO_ATOMICS
   *dest += 1;
 #else
-  atomic_fetch_add(dest, 1);
+  __atomic_fetch_add(dest, 1, __ATOMIC_SEQ_CST);
 #endif
 }
 
@@ -43,7 +37,7 @@ static inline void buff_index_decr(buff_index_t *dest) {
 #ifdef RB_NO_ATOMICS
   *dest -= 1;
 #else
-  atomic_fetch_sub(dest, 1);
+  __atomic_fetch_sub(dest, 1, __ATOMIC_SEQ_CST);
 #endif
 }
 
