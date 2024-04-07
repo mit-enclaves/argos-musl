@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <sys/uio.h>
 #include <errno.h>
 #include <stdint.h>
 #include <limits.h>
@@ -249,6 +250,17 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
     }
 #endif
     return count;
+}
+
+ssize_t tyche_writev(int fd, const struct iovec *iov, int count) {
+    ssize_t n = 0;
+#ifndef TYCHE_NO_SYSCALL
+    printf("Tyche writev: count %d\n ", count);
+#endif
+    for (int i = 0; i < count; i++) {
+        n += tyche_write(fd, iov[i].iov_base, iov[i].iov_len);
+    }
+    return n;
 }
 
 // ——————————————————————————— Memory Management ———————————————————————————— //
