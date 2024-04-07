@@ -120,7 +120,7 @@ int tyche_accept(int fd) {
         read_queue_is_init = 1;
 
         // Put initial commands
-        char *cmds = "PING\r\nSET A 10\r\nGET A\r\n";
+        char *cmds = "PING\r\nSET A 666\r\nCOMMAND\r\nGET A\r\n";
         printf("Commands:\n%s", cmds);
         rb_char_write_n(&read_queue, strlen(cmds), cmds);
     }
@@ -224,8 +224,7 @@ size_t tyche_read(int fd, void *buff, size_t count) {
     int ret = rb_char_read_alias_n(&(app->to_redis), app->to_buffer, (int) count, (char *)buff);
 #endif
     if (ret == FAILURE) {
-      int *suicide = (int*) 0xdeadbabe;
-      *suicide = 101;
+      tyche_suicide(101);
       errno = EAGAIN;
       return 0;
     }
@@ -242,8 +241,7 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
       int res = rb_char_write_alias_n(&(app->from_redis), app->from_buffer, count - written, &source[written]);
       if (res == FAILURE) {
         //TODO: figure something out.
-        int *suicide = (int *) 0xdeadbabe;
-        *suicide = 100;
+        tyche_suicide(100);
         return 0;
       }
       written += res;
@@ -262,13 +260,22 @@ ssize_t tyche_writev(int fd, const struct iovec *iov, int count) {
     }
     return n;
 }
+void tyche_suicide(unsigned int v) {
+  int* suicide = (int *) 0xdeadbabe;
+  tyche_debug(v);
+  *suicide = v;
+}
 
 // ——————————————————————————— Memory Management ———————————————————————————— //
 
 #define PAGE_SIZE (0x1000)
-#define NB_PAGES  (800)
+#define NB_PAGES  (800 * 2)
 
+#ifdef TYCHE_NO_SYSCALL
+static char *mempool = (char*) 0x700000;
+#else
 static char mempool[NB_PAGES * PAGE_SIZE] __attribute__((aligned(0x1000))) = {0};
+#endif
 //TODO implement the bitmap.
 //static uint64_t bitmap [NB_PAGES/64 + 1] = {0};
 //For now let's just use a pointer.
@@ -287,8 +294,7 @@ static void *alloc_segment(size_t len) {
     nb_pages = (len >> 12);
     if ((mempool_next_free + nb_pages) >= NB_PAGES) {
       // Running out of memory.
-      int *suicide = (int*) 0xdeadbabe;
-      *suicide = 0xb00b;
+      tyche_suicide(0xb00b);
     }
     res = (void*) &mempool[(mempool_next_free) * PAGE_SIZE];
     mempool_next_free += nb_pages;
@@ -303,8 +309,7 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
 
     // Print a warning if we are mapping a file, this is not supported!
     if (fd != -1) {
-      int *suicide = (int *) 0xdeadbabe;
-      *suicide = 0xB00B1;
+      tyche_suicide(0xB00B1);
       return NULL;
     }
     void* res = alloc_segment(len);

@@ -7,7 +7,7 @@
 #include "unistd.h"
 
 // Comment/uncomment to enable or disable syscalls
-// #define TYCHE_NO_SYSCALL
+#define TYCHE_NO_SYSCALL
 
 #define TYCHE_SOCKET_FD 14
 #define TYCHE_CONNECTION_FD 15
@@ -30,6 +30,7 @@ int tyche_isatty(int fd);
 void* tyche_mmap(void* start, size_t len, int prot, int flags, int fd, off_t off);
 int tyche_munmap(void* start, size_t len);
 size_t tyche_brk(void* end);
-ssize_t tyche_writev(int fd, const struct iovec *iov, int count);
+ssize_t tyche_writev(int fd, const struct iovec* iov, int count);
+void tyche_suicide(unsigned int v);
 
 #endif
