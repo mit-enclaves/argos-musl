@@ -5,6 +5,5 @@
 
 pid_t getpid(void)
 {
-    return tyche_getpid();
 	return __syscall(SYS_getpid);
 }

@@ -72,7 +72,7 @@ typedef int lsm2_fn(int (*)(int,char **,char **), int, char **);
 static lsm2_fn libc_start_main_stage2;
 
 // Building argv -> envp.
-static char* TYCHE_ARGV[6] = {"redis_enclave", NULL, "LANGUAGE=en_GB:en", "LANG=C.UTF-8", NULL, NULL};
+static char* TYCHE_ARGV[6] = {"seal_enclave", NULL, "LANGUAGE=en_GB:en", "LANG=C.UTF-8", NULL, NULL};
 
 int __libc_start_main(int (*main)(int,char **,char **), int argc, char **argv,
 	void (*init_dummy)(), void(*fini_dummy)(), void(*ldso_dummy)())

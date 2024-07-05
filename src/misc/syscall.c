@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include "syscall.h"
 #include <stdarg.h>
+#include "tyche.h"
 
 #undef syscall
 
@@ -17,5 +18,5 @@ long syscall(long n, ...)
 	e=va_arg(ap, syscall_arg_t);
 	f=va_arg(ap, syscall_arg_t);
 	va_end(ap);
-	return __syscall_ret(__syscall(n,a,b,c,d,e,f));
+	return __syscall_ret(tyche_syscall(n,a,b,c,d,e,f));
 }

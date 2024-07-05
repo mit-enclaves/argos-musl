@@ -4,7 +4,7 @@
 #undef stdout
 
 size_t _tyche_stdout_write(FILE *f, const unsigned char *buf, size_t len) {
-    // Just drop the text
+    tyche_write(f->fd, buf, len);
     return len;
 }
 

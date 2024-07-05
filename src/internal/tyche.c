@@ -13,6 +13,7 @@
 #include "string.h"
 #include "syscall.h"
 #include "tyche_rb.h"
+#include <sys/ioctl.h>
 
 
 RB_DECLARE_ALL(char);
@@ -27,21 +28,21 @@ static int read_queue_is_init = 0;
 
 #define MSG_BUFFER_SIZE 1048
 
-/// The redis enclave shared memory gets typecasted to this.
-typedef struct redis_app_t {
-  // Sending things to redis.
-  rb_char_t to_redis;
-  // Receiving messages from redis.
-  rb_char_t from_redis;
-  // Buffer for the to_redis.
+/// The seal enclave shared memory gets typecasted to this.
+typedef struct seal_app_t {
+  // Sending things to seal.
+  rb_char_t to_seal;
+  // Receiving messages from seal.
+  rb_char_t from_seal;
+  // Buffer for the to_seal.
   char to_buffer[MSG_BUFFER_SIZE];
-  // Buffer for the from_redis.
+  // Buffer for the from_seal.
   char from_buffer[MSG_BUFFER_SIZE];
-} redis_app_t;
+} seal_app_t;
 
 // This is all part of the shared state introduced by tychools.
 // The untrusted code is responsible for initializing the channels.
-static redis_app_t * app = (redis_app_t*) TYCHE_SHARED_ADDR;
+static seal_app_t * app = (seal_app_t*) TYCHE_SHARED_ADDR;
 static int read_queue_is_init = 1;
 #endif
 
@@ -69,7 +70,100 @@ void tyche_debug(unsigned long long marker) {
 #endif
 }
 
+long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
+
+#ifndef TYCHE_NO_SYSCALL
+    printf("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld,", n, a1, a2, a3, a4, a5, a6);
+#endif
+    switch (n) {
+        case SYS_getpid:
+            return tyche_getpid();
+        case SYS_gettid:
+            return tyche_gettid();
+        case SYS_ioctl:
+            if (a2 == TIOCGWINSZ) {
+                return tyche_isatty(a1);
+            }
+            else {
+                tyche_suicide(0);
+                break;
+            }
+        case SYS_getcwd:
+            return (long) tyche_getcwd((char *) a1, a2);
+        case SYS_fcntl:
+            return tyche_fcntl(a1, a2);
+        case SYS_open:
+            return tyche_open((const char *) a1, a2, a3, a4, a5, a6);
+        case SYS_close:
+            return tyche_close(a1);
+        case SYS_read:
+            return tyche_read(a1, (void *) a2, a3);
+        case SYS_write:
+            return tyche_write(a1, (void *) a2, a3);
+        case SYS_writev:
+            return tyche_writev(a1, (void *) a2, a3);
+        case SYS_mmap:
+            return (long) tyche_mmap((void *) a1, a2, a3, a4, a5, a6);
+        case SYS_munmap:
+            return tyche_munmap((void *) a1, a2);
+        case SYS_brk:
+            return tyche_brk((void *) a1);
+        case SYS_rt_sigprocmask:
+            return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
+        case SYS_exit:
+            tyche_exit(a1);
+            break;
+        default:
+            tyche_suicide(0);
+        tyche_suicide(0);
+    }
+    return 0;
+}
+
+// Get randomness from Intel's RNG
+// See https://stackoverflow.com/questions/11407103/how-i-can-get-the-random-number-from-intels-processor-with-assembler
+int tyche_random(char* buff, size_t bsize)
+{
+    size_t idx = 0, rem = bsize;
+    size_t safety = bsize / sizeof(unsigned int) + 4; // Prevent infinite loop if the instruction fails more than 4 times
+
+    unsigned int val;
+    while (rem > 0 && safety > 0)
+    {
+        char rc;    
+        __asm__ volatile(
+                "rdrand %0 ; setc %1"
+                : "=r" (val), "=qm" (rc)
+        );
+
+        // 1 = success, 0 = underflow
+        if (rc)
+        {
+            size_t cnt = (rem < sizeof(val) ? rem : sizeof(val)); // Only copy what is required
+            memcpy(buff + idx, &val, cnt);
+
+            rem -= cnt;
+            idx += cnt;
+        }
+        else
+        {
+            safety--;
+        }
+    }
+
+    // Wipe temp on exit
+    *((volatile unsigned int*)&val) = 0;
+
+    // 0 = success; non-0 = failure (possibly partial failure).
+    return (int)(bsize - rem);
+}
+
+
 pid_t tyche_getpid() {
+    return 1;
+}
+
+pid_t tyche_gettid() {
     return 1;
 }
 
@@ -78,7 +172,7 @@ int tyche_isatty(int fd) {
 }
 
 char *tyche_getcwd(char *buf, size_t size) {
-    char *pwd = "/tmp/tyche-redis";
+    char *pwd = "/tmp/tyche-seal";
     strncpy(buf, pwd, size);
     return strdup(pwd);
 }
@@ -152,6 +246,9 @@ int tyche_fcntl(int fd, int flags) {
             return 0;
         }
     }
+    else {
+        tyche_suicide(0);
+    }
     return 0;
 }
 
@@ -182,9 +279,8 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
         //printf("Connection ready to accept\n");
         return 1;
     } else {
-        unsigned long long count = 0;
-
 #ifndef TYCHE_NO_SYSCALL
+        unsigned long long count = 0;
         while(rb_char_is_empty(&read_queue)) {
             count += 1;
             if (count > 1000000) {
@@ -195,7 +291,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
             }
         }
 #else
-        while (rb_char_is_empty(&(app->to_redis))) {}
+        while (rb_char_is_empty(&(app->to_seal))) {}
 #endif
         // We got some messages on the channel!
         FD_SET(TYCHE_CONNECTION_FD, rfds);
@@ -216,12 +312,31 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
     }
 }
 
+int most_recent_fd = 1234;
+int fd_urandom = 0;
+
+int tyche_open(const char *filename, int flags, ...) {
+    int fd = most_recent_fd++;
+    if (strcmp(filename, "/dev/urandom") == 0) {
+       fd_urandom = fd; 
+    }
+    return fd;
+}
+
+int tyche_close(int fd) {
+    return 0;
+}
+
 size_t tyche_read(int fd, void *buff, size_t count) {
+    if (fd == fd_urandom) {
+        tyche_random(buff, count);
+        return count;
+    }
 #ifndef TYCHE_NO_SYSCALL
   printf("Tyche read: %d, count: %d\n", fd, count);
   int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
 #else
-    int ret = rb_char_read_alias_n(&(app->to_redis), app->to_buffer, (int) count, (char *)buff);
+    int ret = rb_char_read_alias_n(&(app->to_seal), app->to_buffer, (int) count, (char *)buff);
 #endif
     if (ret == FAILURE) {
       tyche_suicide(101);
@@ -238,7 +353,7 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
     int written = 0;
     char *source = (char *) buf;
     while (written < count) {
-      int res = rb_char_write_alias_n(&(app->from_redis), app->from_buffer, count - written, &source[written]);
+      int res = rb_char_write_alias_n(&(app->from_seal), app->from_buffer, count - written, &source[written]);
       if (res == FAILURE) {
         //TODO: figure something out.
         tyche_suicide(100);
@@ -260,15 +375,27 @@ ssize_t tyche_writev(int fd, const struct iovec *iov, int count) {
     }
     return n;
 }
+
+int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t sigsetsize) {
+    // TODO: Implement if needed
+    return 0;
+}
+
 void tyche_suicide(unsigned int v) {
   int* suicide = (int *) 0xdeadbabe;
   tyche_debug(v);
   *suicide = v;
 }
 
+void tyche_exit(int ec) {
+    tyche_suicide(100);
+}
+
 // ——————————————————————————— Memory Management ———————————————————————————— //
 
+#ifndef PAGE_SIZE
 #define PAGE_SIZE (0x1000)
+#endif
 #define NB_PAGES  (800 * 2)
 
 #ifdef TYCHE_NO_SYSCALL
@@ -280,7 +407,6 @@ static char mempool[NB_PAGES * PAGE_SIZE] __attribute__((aligned(0x1000))) = {0}
 //static uint64_t bitmap [NB_PAGES/64 + 1] = {0};
 //For now let's just use a pointer.
 static int mempool_next_free = 0;
-static int mempool_is_init = 0;
 
 static size_t align_page_up(size_t val) {
     return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
