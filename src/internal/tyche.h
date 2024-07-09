@@ -7,6 +7,7 @@
 #include "sys/uio.h"
 #include "unistd.h"
 #include <stdint.h>
+#include <stdarg.h>
 
 // Comment/uncomment to enable or disable syscalls
 #define TYCHE_NO_SYSCALL
@@ -16,6 +17,12 @@
 #define TYCHE_SHARED_ADDR 0x300000
 
 void tyche_debug(unsigned long long marker);
+int tyche_log(const char *format, ...);
+void tyche_log_char_buffer(char* buff, int size);
+
+#define LOG tyche_log
+#define LOG_BYTES tyche_log_char_buffer
+
 int tyche_socket();
 int tyche_setsockopt(int fd);
 int tyche_bind(int fd);

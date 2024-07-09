@@ -15,7 +15,6 @@
 #include "tyche_rb.h"
 #include <sys/ioctl.h>
 
-
 RB_DECLARE_ALL(char);
 
 #ifndef TYCHE_NO_SYSCALL
@@ -60,6 +59,7 @@ void tyche_debug(unsigned long long marker) {
 #ifndef TYCHE_NO_SYSCALL
     printf("Tyche Debug :)\n");
 #else
+    LOG("Tyche Debug:\n");
   __asm__ __volatile__ (
       "movq %0, %%rdi\n\t"
       "movq $10, %%rax\n\t"
@@ -73,8 +73,9 @@ void tyche_debug(unsigned long long marker) {
 long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
 
 #ifndef TYCHE_NO_SYSCALL
-    printf("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld,", n, a1, a2, a3, a4, a5, a6);
+    printf("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
 #endif
+    LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
     switch (n) {
         case SYS_getpid:
             return tyche_getpid();
@@ -153,6 +154,10 @@ int tyche_random(char* buff, size_t bsize)
 
     // Wipe temp on exit
     *((volatile unsigned int*)&val) = 0;
+
+    LOG("Randomness: ");
+    LOG_BYTES(buff, bsize);
+    LOG("\n");
 
     // 0 = success; non-0 = failure (possibly partial failure).
     return (int)(bsize - rem);
@@ -329,8 +334,8 @@ int tyche_close(int fd) {
 
 size_t tyche_read(int fd, void *buff, size_t count) {
     if (fd == fd_urandom) {
-        tyche_random(buff, count);
-        return count;
+        int ret = tyche_random(buff, count);
+        return ret;
     }
 #ifndef TYCHE_NO_SYSCALL
   printf("Tyche read: %d, count: %d\n", fd, count);
@@ -382,6 +387,7 @@ int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t 
 }
 
 void tyche_suicide(unsigned int v) {
+  LOG("Entered tyche_suicide with value %d", v);
   int* suicide = (int *) 0xdeadbabe;
   tyche_debug(v);
   *suicide = v;
