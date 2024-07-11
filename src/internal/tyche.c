@@ -55,6 +55,9 @@ int connection_accepted = 0;
 int connection_selected = 0;
 enum tyche_test_state state = TTS_INIT;
 
+int most_recent_fd = 1234;
+int fd_urandom = 0;
+
 void tyche_debug(unsigned long long marker) {
 #ifndef TYCHE_NO_SYSCALL
     printf("Tyche Debug :)\n");
@@ -75,7 +78,9 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
 #ifndef TYCHE_NO_SYSCALL
     printf("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
 #endif
-    LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
+    //if(a1 != fd_urandom) {
+    //    LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
+    //}
     switch (n) {
         case SYS_getpid:
             return tyche_getpid();
@@ -111,7 +116,13 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             return tyche_brk((void *) a1);
         case SYS_rt_sigprocmask:
             return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
+        case SYS_exit_group:
+            tyche_exit(a1);
+            break; 
         case SYS_exit:
+            tyche_exit(a1);
+            break;
+        case SYS_tkill:
             tyche_exit(a1);
             break;
         default:
@@ -155,9 +166,9 @@ int tyche_random(char* buff, size_t bsize)
     // Wipe temp on exit
     *((volatile unsigned int*)&val) = 0;
 
-    LOG("Randomness: ");
-    LOG_BYTES(buff, bsize);
-    LOG("\n");
+    //LOG("Randomness: ");
+    //LOG_BYTES(buff, bsize);
+    //LOG("\n");
 
     // 0 = success; non-0 = failure (possibly partial failure).
     return (int)(bsize - rem);
@@ -317,9 +328,6 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
     }
 }
 
-int most_recent_fd = 1234;
-int fd_urandom = 0;
-
 int tyche_open(const char *filename, int flags, ...) {
     int fd = most_recent_fd++;
     if (strcmp(filename, "/dev/urandom") == 0) {
@@ -387,14 +395,26 @@ int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t 
 }
 
 void tyche_suicide(unsigned int v) {
-  LOG("Entered tyche_suicide with value %d", v);
+  LOG("Entered tyche_suicide with value %d\n", v);
   int* suicide = (int *) 0xdeadbabe;
   tyche_debug(v);
   *suicide = v;
 }
 
+
 void tyche_exit(int ec) {
-    tyche_suicide(100);
+#ifndef TYCHE_NO_SYSCALL
+    printf("Tyche Debug :)\n");
+#else
+    LOG("Tyche Exit\n");
+    __asm__ __volatile__ (
+      "movq %0, %%rdi\n\t"
+      "movq $9, %%rax\n\t"
+      "vmcall\n\t"
+      :
+      : "rm" (ec)
+      : "rax", "rdi", "memory");
+#endif
 }
 
 // ——————————————————————————— Memory Management ———————————————————————————— //
