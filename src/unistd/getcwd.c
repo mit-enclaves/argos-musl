@@ -3,7 +3,6 @@
 #include <limits.h>
 #include <string.h>
 #include "syscall.h"
-#include "tyche.h"
 
 char *getcwd(char *buf, size_t size)
 {

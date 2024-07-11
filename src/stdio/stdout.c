@@ -1,5 +1,4 @@
 #include "stdio_impl.h"
-#include "tyche.h"
 
 #undef stdout
 
