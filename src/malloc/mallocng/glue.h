@@ -12,7 +12,6 @@
 #include "libc.h"
 #include "lock.h"
 #include "dynlink.h"
-#include "tyche.h"
 
 // use macros to appropriately namespace these.
 #define size_classes __malloc_size_classes

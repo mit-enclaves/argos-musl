@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <limits.h>
 #include "syscall.h"
-#include "tyche.h"
 
 static void dummy(void) { }
 weak_alias(dummy, __vm_wait);

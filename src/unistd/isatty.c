@@ -2,7 +2,6 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include "syscall.h"
-#include "tyche.h"
 
 int isatty(int fd)
 {

@@ -16,6 +16,6 @@ void _start_c(long *p)
 	int argc = 0;
 	char *empty_arg = NULL;
     char **argv = &empty_arg;
-	
+
 	__libc_start_main(main, argc, argv, _init, _fini, 0);
 }

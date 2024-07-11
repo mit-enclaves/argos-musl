@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include "syscall.h"
-#include "tyche.h"
 
 _Noreturn void _Exit(int ec)
 {

@@ -2,13 +2,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include "syscall.h"
-#include "stdio.h"
-#include "tyche.h"
 
 int socket(int domain, int type, int protocol)
 {
-    printf("socket(%d, %d, %d)\n", domain, type, protocol);
-    return tyche_socket();
 	int s = __socketcall(socket, domain, type, protocol, 0, 0, 0);
 
 	if ((s==-EINVAL || s==-EPROTONOSUPPORT)

@@ -102,8 +102,20 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             return tyche_open((const char *) a1, a2, a3, a4, a5, a6);
         case SYS_close:
             return tyche_close(a1);
+        case SYS_bind:
+            return tyche_bind(a1);
+        case SYS_listen:
+            return tyche_listen(a1);
         case SYS_read:
             return tyche_read(a1, (void *) a2, a3);
+        case SYS_setsockopt:
+            return tyche_setsockopt(a1);
+        case SYS_socket:
+            return tyche_socket();
+        case SYS_select:
+            return tyche_select(a1, (void *) a2, (void *) a3);
+        case SYS_gettimeofday:
+            return tyche_gettimeofday((void *) a1, (void *) a2);
         case SYS_write:
             return tyche_write(a1, (void *) a2, a3);
         case SYS_writev:
@@ -118,7 +130,7 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
         case SYS_exit_group:
             tyche_exit(a1);
-            break; 
+            break;
         case SYS_exit:
             tyche_exit(a1);
             break;
@@ -142,7 +154,7 @@ int tyche_random(char* buff, size_t bsize)
     unsigned int val;
     while (rem > 0 && safety > 0)
     {
-        char rc;    
+        char rc;
         __asm__ volatile(
                 "rdrand %0 ; setc %1"
                 : "=r" (val), "=qm" (rc)
@@ -331,7 +343,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
 int tyche_open(const char *filename, int flags, ...) {
     int fd = most_recent_fd++;
     if (strcmp(filename, "/dev/urandom") == 0) {
-       fd_urandom = fd; 
+       fd_urandom = fd;
     }
     return fd;
 }
@@ -468,7 +480,7 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
     return res;
 }
 
-int tyche_munmap(void *start, size_t len) { 
+int tyche_munmap(void *start, size_t len) {
     //TODO implement.
     // TODO: insert a new node here.
     return 0;

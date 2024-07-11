@@ -3,11 +3,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include "syscall.h"
-#include "stdio.h"
 
 int accept4(int fd, struct sockaddr *restrict addr, socklen_t *restrict len, int flg)
 {
-    printf("accept4(%d)\n", fd);
 	if (!flg) return accept(fd, addr, len);
 	int ret = socketcall_cp(accept4, fd, addr, len, flg, 0, 0);
 	if (ret>=0 || (errno != ENOSYS && errno != EINVAL)) return ret;

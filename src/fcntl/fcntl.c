@@ -2,15 +2,12 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <errno.h>
-#include "tyche.h"
 #include "syscall.h"
-#include "stdio.h"
 
 int fcntl(int fd, int cmd, ...)
 {
 	unsigned long arg;
 	va_list ap;
-    printf("fcntl(%d)\n", fd);
 	va_start(ap, cmd);
 	arg = va_arg(ap, unsigned long);
 	va_end(ap);
