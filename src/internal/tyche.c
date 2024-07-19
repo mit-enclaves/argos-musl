@@ -427,6 +427,7 @@ void tyche_exit(int ec) {
       : "rm" (ec)
       : "rax", "rdi", "memory");
 #endif
+tyche_suicide(0xdead);
 }
 
 // ——————————————————————————— Memory Management ———————————————————————————— //
@@ -434,7 +435,7 @@ void tyche_exit(int ec) {
 #ifndef PAGE_SIZE
 #define PAGE_SIZE (0x1000)
 #endif
-#define NB_PAGES  (800 * 2)
+#define NB_PAGES  (800 * 4)
 
 #ifdef TYCHE_NO_SYSCALL
 static char *mempool = (char*) 0x700000;
