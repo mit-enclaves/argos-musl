@@ -13,6 +13,7 @@
 #include "string.h"
 #include "syscall.h"
 #include "tyche_rb.h"
+#include "tyche_alloc.h"
 #include <sys/ioctl.h>
 
 RB_DECLARE_ALL(char);
@@ -427,45 +428,14 @@ void tyche_exit(int ec) {
       : "rm" (ec)
       : "rax", "rdi", "memory");
 #endif
+tyche_suicide(0xdead);
 }
 
 // ——————————————————————————— Memory Management ———————————————————————————— //
 
-#ifndef PAGE_SIZE
-#define PAGE_SIZE (0x1000)
-#endif
-#define NB_PAGES  (800 * 2)
-
-#ifdef TYCHE_NO_SYSCALL
-static char *mempool = (char*) 0x700000;
-#else
-static char mempool[NB_PAGES * PAGE_SIZE] __attribute__((aligned(0x1000))) = {0};
-#endif
-//TODO implement the bitmap.
-//static uint64_t bitmap [NB_PAGES/64 + 1] = {0};
-//For now let's just use a pointer.
-static int mempool_next_free = 0;
-
-static size_t align_page_up(size_t val) {
-    return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
-}
-
-static void *alloc_segment(size_t len) {
-    void* res = NULL;
-    int nb_pages = 0;
-    // Align size to next page size multiple
-    len = align_page_up(len);
-    nb_pages = (len >> 12);
-    if ((mempool_next_free + nb_pages) >= NB_PAGES) {
-      // Running out of memory.
-      tyche_suicide(0xb00b);
-    }
-    res = (void*) &mempool[(mempool_next_free) * PAGE_SIZE];
-    mempool_next_free += nb_pages;
-    return res;
-}
 
 void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off) {
+    
     // We just ignore PROT_NONE as it is used only for guard pages
     if (prot == PROT_NONE) {
         return start;
@@ -476,13 +446,15 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
       tyche_suicide(0xB00B1);
       return NULL;
     }
+    
     void* res = alloc_segment(len);
+    LOG("Called mmap for size %llx and returned addr 0x%llx\n", len, res);
     return res;
 }
 
 int tyche_munmap(void *start, size_t len) {
-    //TODO implement.
-    // TODO: insert a new node here.
+    free_segment(start);
+    LOG("munmap for size %llx at addr 0x%llx\n", len, start);
     return 0;
 }
 
