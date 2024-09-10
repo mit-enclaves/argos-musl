@@ -5,6 +5,21 @@
 #include <unistd.h>
 #include "tyche.h"
 
+#define ALLOC_DEBUG 0
+
+#ifndef PAGE_SHIFT
+#define PAGE_SHIFT 12
+#endif
+#ifndef PAGE_SIZE
+#define PAGE_SIZE ((size_t)1 << PAGE_SHIFT) // 0x1000
+#endif
+
+#define NB_PAGES  (800 * 32)
+
+#define MEMPOOL_ADDR 0x700000
+
+#define MAP_FAILED ((void *) -1)
+
 /*
  * Every allocation needs an 8-byte header to store the allocation size while
  * staying 8-byte aligned. The address returned by "malloc" is the address
@@ -14,29 +29,25 @@
 #define HEADER_SIZE 8
 
 /*
- * The minimum allocation size is 16 bytes because we have an 8-byte header and
- * we need to stay 8-byte aligned.
+ * The minimum allocation size is 0x1000 because we only allocate pages
  */
-#define MIN_ALLOC_LOG2 4
+#define MIN_ALLOC_LOG2 PAGE_SHIFT
 #define MIN_ALLOC ((size_t)1 << MIN_ALLOC_LOG2)
 
 /*
  * The maximum allocation size is currently set to 2gb. This is the total size
- * of the heap. It's technically also the maximum allocation size because the
- * heap could consist of a single allocation of this size. But of course real
- * heaps will have multiple allocations, so the real maximum allocation limit
+ * of the mempool. It's technically also the maximum allocation size because the
+ * mempool could consist of a single allocation of this size. But of course real
+ * mempool will have multiple allocations, so the real maximum allocation limit
  * is at most 1gb.
  */
 #define MAX_ALLOC_LOG2 31
 #define MAX_ALLOC ((size_t)1 << MAX_ALLOC_LOG2)
 
-#ifndef PAGE_SIZE
-#define PAGE_SIZE (0x1000)
-#endif
-
-#define NB_PAGES  (800 * 4)
-
-#define MEMPOOL_ADDR 0x700000
-
 void *alloc_segment(size_t request);
-void free_segment(void *ptr);
+int free_segment(void *ptr, size_t len);
+
+#if ALLOC_DEBUG == 1
+void print_mempool_state();
+void print_allocation_info();
+#endif

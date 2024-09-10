@@ -15,6 +15,7 @@
  */
 
 #include "tyche_alloc.h"
+#include <stdbool.h>
 
 /*
  * Allocations are done in powers of two starting from MIN_ALLOC and ending at
@@ -101,9 +102,11 @@ static uint8_t *max_ptr;
  * will return false if the memory could not be reserved.
  */
 static int update_max_ptr(uint8_t *new_value) {
-  // Memory is allocated statically
-  // Run out of memory
-  return 0;
+  if (new_value > max_ptr) {
+    // Memory is allocated statically and cannot be extended
+    return 0;
+  }
+  return 1;
 }
 
 /*
@@ -252,6 +255,75 @@ static int lower_bucket_limit(size_t bucket) {
   return 1;
 }
 
+#if ALLOC_DEBUG == 1
+
+#define MAX_ALLOCATIONS 1000 // Adjust as needed
+
+typedef struct {
+    void *ptr;
+    size_t size;
+    bool is_used;
+} allocation_info_t;
+
+int max_allocations = 0;
+int current_allocation = 0;
+
+int max_allocations_blocks = 0;
+int current_allocation_blocks = 0;
+
+static allocation_info_t allocations[MAX_ALLOCATIONS] = {0};
+static int allocation_count = 0;
+
+static allocation_info_t* add_allocation(void *ptr, size_t size, bool is_used) {
+    for (int i = 0; i < allocation_count; i++) {
+        if (allocations[i].ptr == ptr) {
+            if(allocations[i].is_used == is_used) {
+                LOG("Warning: Attempting to add already allocated memory at %p, size %zu\n", ptr, size);
+            }
+            allocations[i].size = size;
+            allocations[i].is_used = is_used;
+            current_allocation += size;
+            if(current_allocation > max_allocations) {
+                max_allocations = current_allocation;
+            }
+            size_t size_block = (size_t)1 << (MAX_ALLOC_LOG2 - bucket_for_request(size));
+            current_allocation_blocks += size_block;
+            if(current_allocation_blocks > max_allocations_blocks) {
+                max_allocations_blocks = current_allocation_blocks;
+            }
+            return &allocations[i];
+        }
+    }
+    if (allocation_count < MAX_ALLOCATIONS) {
+        allocations[allocation_count].ptr = ptr;
+        allocations[allocation_count].size = size;
+        allocations[allocation_count].is_used = is_used;
+        current_allocation += size;
+        if(current_allocation > max_allocations) {
+            max_allocations = current_allocation;
+        }
+        size_t size_block = (size_t)1 << (MAX_ALLOC_LOG2 - bucket_for_request(size));
+        current_allocation_blocks += size_block;
+        if(current_allocation_blocks > max_allocations_blocks) {
+            max_allocations_blocks = current_allocation_blocks;
+        }
+        return &allocations[allocation_count++];
+    }
+    return NULL; // No space left to track allocations
+}
+
+static allocation_info_t* find_allocation(void *ptr) {
+    for (int i = 0; i < allocation_count; i++) {
+        if (allocations[i].ptr == ptr) {
+            current_allocation -= allocations[i].size;
+            current_allocation_blocks -= (size_t)1 << (MAX_ALLOC_LOG2 - bucket_for_request(allocations[i].size));
+            return &allocations[i];
+        }
+    }
+    return NULL; // No space left to track allocations
+}
+#endif
+
 void *alloc_segment(size_t request) {
   size_t original_bucket, bucket;
 
@@ -260,13 +332,13 @@ void *alloc_segment(size_t request) {
    * a hard-coded limit on the maximum allocation size because of the way this
    * allocator works.
    */
-  if (request + HEADER_SIZE > MAX_ALLOC) {
-    return NULL;
+  if (request > MAX_ALLOC) {
+    return MAP_FAILED;
   }
 
   /*
    * Initialize our global state if this is the first call to "malloc". At the
-   * beginning, the tree has a single node that represents the smallest
+   * beginning, the tree has a single node that represents the smallestu
    * possible allocation size. More memory will be reserved later as needed.
    */
   if (base_ptr == NULL) {
@@ -281,7 +353,7 @@ void *alloc_segment(size_t request) {
 
     bucket_limit = BUCKET_COUNT - 1;
     if(!update_max_ptr(base_ptr + sizeof(list_t))) {
-        return NULL;
+        return MAP_FAILED;
     }
     list_init(&buckets[BUCKET_COUNT - 1]);
     list_push(&buckets[BUCKET_COUNT - 1], (list_t *)base_ptr);
@@ -291,7 +363,7 @@ void *alloc_segment(size_t request) {
    * Find the smallest bucket that will fit this request. This doesn't check
    * that there's space for the request yet.
    */
-  bucket = bucket_for_request(request + HEADER_SIZE);
+  bucket = bucket_for_request(request);
   original_bucket = bucket;
 
   /*
@@ -308,7 +380,7 @@ void *alloc_segment(size_t request) {
      * size. Try to grow the tree and stop here if we can't.
      */
     if (!lower_bucket_limit(bucket)) {
-      return NULL;
+      return MAP_FAILED;
     }
 
     /*
@@ -334,7 +406,7 @@ void *alloc_segment(size_t request) {
        * for this bucket. Popping the free list will give us this right child.
        */
       if (!lower_bucket_limit(bucket - 1)) {
-        return NULL;
+        return MAP_FAILED;
       }
       ptr = (uint8_t *)list_pop(&buckets[bucket]);
     }
@@ -347,7 +419,10 @@ void *alloc_segment(size_t request) {
     bytes_needed = bucket < original_bucket ? size / 2 + sizeof(list_t) : size;
     if (!update_max_ptr(ptr + bytes_needed)) {
       list_push(&buckets[bucket], (list_t *)ptr);
-      return NULL;
+#if ALLOC_DEBUG == 1
+      print_mempool_state();
+#endif
+      return MAP_FAILED;
     }
 
     /*
@@ -381,33 +456,37 @@ void *alloc_segment(size_t request) {
     }
 
     /*
-     * Now that we have a memory address, write the block header (just the size
-     * of the allocation) and return the address immediately after the header.
+     * Return the pointer.
      */
-    *(size_t *)ptr = request;
-    return ptr + HEADER_SIZE;
+#if ALLOC_DEBUG == 1  
+    if (ptr != MAP_FAILED) {
+        allocation_info_t *info = add_allocation(ptr, request, 1);
+        if (!info) {
+            LOG("Warning: Unable to track allocation at %p, size %zu\n", ptr, request);
+        }
+    }
+#endif
+
+    return ptr;
   }
 
-  return NULL;
+  return MAP_FAILED;
 }
 
-void free_segment(void *ptr) {
+int free_segment(void *ptr, size_t len) {
   size_t bucket, i;
 
   /*
    * Ignore any attempts to free a NULL pointer.
    */
   if (!ptr) {
-    return;
+    return -1;
   }
 
   /*
-   * We were given the address returned by "malloc" so get back to the actual
-   * address of the node by subtracting off the size of the block header. Then
-   * look up the index of the node corresponding to this address.
+   * Look up the index of the node corresponding to this address.
    */
-  ptr = (uint8_t *)ptr - HEADER_SIZE;
-  bucket = bucket_for_request(*(size_t *)ptr + HEADER_SIZE);
+  bucket = bucket_for_request(len);
   i = node_for_ptr((uint8_t *)ptr, bucket);
 
   /*
@@ -454,4 +533,53 @@ void free_segment(void *ptr) {
    * for better memory locality.
    */
   list_push(&buckets[bucket], (list_t *)ptr_for_node(i, bucket));
+
+#if ALLOC_DEBUG == 1
+  allocation_info_t *info = find_allocation(ptr);
+  if (!info || !info->is_used) {
+      LOG("Error: Attempting to free unallocated or already freed memory at %p\n", ptr);
+      return -1;
+  }
+  if (bucket_for_request(len) != bucket_for_request(info->size)) {
+      LOG("Warning: Freeing memory at %p with size %lx, but it was allocated with size %lx (bucket sizes %lx and %lx)\n", 
+          ptr, len, info->size, bucket_for_request(len), bucket_for_request(info->size));
+  }
+  info->is_used = 0; // Mark as freed
+#endif
+
+  return 0;
 }
+
+#if ALLOC_DEBUG == 1
+// Add a function to print allocation info
+void print_allocation_info() {
+    LOG("Current Allocations:\n");
+    for (int i = 0; i < allocation_count; i++) {
+        if (allocations[i].is_used) {
+            LOG("Address: %p, Size: %zu, Status: %s\n", 
+            allocations[i].ptr, 
+            allocations[i].size, 
+            allocations[i].is_used ? "Used" : "Freed");
+        }
+    }
+    LOG("Max Allocations: %lx\n", max_allocations);
+    LOG("Max Allocations Blocks: %lx\n", max_allocations_blocks);
+    LOG("Max Size Tree: %lx\n", NB_PAGES * PAGE_SIZE);
+}
+
+void print_mempool_state() {
+  for (int i = 0; i < BUCKET_COUNT; i++) {
+    size_t block_size = (size_t)1 << (MAX_ALLOC_LOG2 - i);
+    size_t free_blocks = 0;
+    list_t *current = buckets[i].next;
+    
+    // Count free blocks in this bucket
+    while (current != 0 && current != &buckets[i]) {
+      free_blocks++;
+      current = current->next;
+    }
+    
+    LOG("Bucket %d (size %llx): %zu free blocks\n", i, block_size, free_blocks);
+  }
+}
+#endif

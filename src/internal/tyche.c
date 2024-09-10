@@ -5,6 +5,7 @@
 #include <sys/uio.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <limits.h>
 #include "unistd.h"
 #include "stdio.h"
@@ -60,10 +61,10 @@ int most_recent_fd = 1234;
 int fd_urandom = 0;
 
 void tyche_debug(unsigned long long marker) {
+    LOG("Tyche Debug:\n");
 #ifndef TYCHE_NO_SYSCALL
     printf("Tyche Debug :)\n");
 #else
-    LOG("Tyche Debug:\n");
   __asm__ __volatile__ (
       "movq %0, %%rdi\n\t"
       "movq $10, %%rax\n\t"
@@ -76,71 +77,73 @@ void tyche_debug(unsigned long long marker) {
 
 long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
 
-#ifndef TYCHE_NO_SYSCALL
-    printf("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
-#endif
     //if(a1 != fd_urandom) {
     //    LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
     //}
     switch (n) {
-        case SYS_getpid:
-            return tyche_getpid();
-        case SYS_gettid:
-            return tyche_gettid();
-        case SYS_ioctl:
-            if (a2 == TIOCGWINSZ) {
-                return tyche_isatty(a1);
-            }
-            else {
-                tyche_suicide(0);
-                break;
-            }
-        case SYS_getcwd:
-            return (long) tyche_getcwd((char *) a1, a2);
-        case SYS_fcntl:
-            return tyche_fcntl(a1, a2);
-        case SYS_open:
-            return tyche_open((const char *) a1, a2, a3, a4, a5, a6);
-        case SYS_close:
-            return tyche_close(a1);
-        case SYS_bind:
-            return tyche_bind(a1);
-        case SYS_listen:
-            return tyche_listen(a1);
-        case SYS_read:
-            return tyche_read(a1, (void *) a2, a3);
-        case SYS_setsockopt:
-            return tyche_setsockopt(a1);
-        case SYS_socket:
-            return tyche_socket();
-        case SYS_select:
-            return tyche_select(a1, (void *) a2, (void *) a3);
-        case SYS_gettimeofday:
-            return tyche_gettimeofday((void *) a1, (void *) a2);
-        case SYS_write:
-            return tyche_write(a1, (void *) a2, a3);
-        case SYS_writev:
-            return tyche_writev(a1, (void *) a2, a3);
+        // case SYS_getpid:
+        //     return tyche_getpid();
+        // case SYS_gettid:
+        //     return tyche_gettid();
+        // case SYS_ioctl:
+        //     if (a2 == TIOCGWINSZ) {
+        //         return tyche_isatty(a1);
+        //     }
+        //     else {
+        //         tyche_suicide(0);
+        //         break;
+        //     }
+        // case SYS_getcwd:
+        //     return (long) tyche_getcwd((char *) a1, a2);
+        // case SYS_fcntl:
+        //     return tyche_fcntl(a1, a2);
+        // case SYS_open:
+        //     return tyche_open((const char *) a1, a2, a3, a4, a5, a6);
+        // case SYS_close:
+        //     return tyche_close(a1);
+        // case SYS_bind:
+        //     return tyche_bind(a1);
+        // case SYS_listen:
+        //     return tyche_listen(a1);
+        // case SYS_read:
+        //     return tyche_read(a1, (void *) a2, a3);
+        // case SYS_setsockopt:
+        //     return tyche_setsockopt(a1);
+        // case SYS_socket:
+        //     return tyche_socket();
+        // case SYS_select:
+        //     return tyche_select(a1, (void *) a2, (void *) a3);
+        // case SYS_gettimeofday:
+        //     return tyche_gettimeofday((void *) a1, (void *) a2);
+        // case SYS_write:
+        //     return tyche_write(a1, (void *) a2, a3);
+        // case SYS_writev:
+        //     return tyche_writev(a1, (void *) a2, a3);
         case SYS_mmap:
             return (long) tyche_mmap((void *) a1, a2, a3, a4, a5, a6);
         case SYS_munmap:
             return tyche_munmap((void *) a1, a2);
-        case SYS_brk:
-            return tyche_brk((void *) a1);
-        case SYS_rt_sigprocmask:
-            return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
+        // case SYS_brk:
+        //    return tyche_brk((void *) a1);
+        // case SYS_rt_sigprocmask:
+        //     return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
         case SYS_exit_group:
-            tyche_exit(a1);
-            break;
         case SYS_exit:
-            tyche_exit(a1);
-            break;
         case SYS_tkill:
-            tyche_exit(a1);
-            break;
+            #if ALLOC_DEBUG == 1
+            print_allocation_info();
+            print_mempool_state();
+            #endif
+            //tyche_exit(a1);
+            //break;
         default:
-            tyche_suicide(0);
-        tyche_suicide(0);
+            unsigned long ret;
+            register long r10 __asm__("r10") = a4;
+            register long r8 __asm__("r8") = a5;
+            register long r9 __asm__("r9") = a6;
+            __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+            					  "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+            return ret;
     }
     return 0;
 }
@@ -448,14 +451,19 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
     }
     
     void* res = alloc_segment(len);
-    LOG("Called mmap for size %llx and returned addr 0x%llx\n", len, res);
+    
+    if(flags & MAP_ANONYMOUS) {
+        memset(res, 0, len);
+    }
+
+    //LOG("Called mmap for size %llx and returned addr 0x%llx\n", len, res);
     return res;
 }
 
 int tyche_munmap(void *start, size_t len) {
-    free_segment(start);
-    LOG("munmap for size %llx at addr 0x%llx\n", len, start);
-    return 0;
+    int ret = free_segment(start, len);
+    //LOG("munmap for size %llx at addr 0x%llx\n", len, start);
+    return ret;
 }
 
 #define BRK_NB_PAGES 20
@@ -475,7 +483,7 @@ size_t tyche_brk(void *end) {
     }
 
     if ((size_t)end > (size_t)brk_pool + BRK_NB_PAGES * PAGE_SIZE || (size_t)end < (size_t)brk_pool) {
-        printf("Invalid brk!!!\n");
+        LOG("Invalid brk!!!\n");
         return -ENOMEM;
     } else {
         brk_cursor = end;

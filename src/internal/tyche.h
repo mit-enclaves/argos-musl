@@ -10,7 +10,7 @@
 #include <stdarg.h>
 
 // Comment/uncomment to enable or disable syscalls
-#define TYCHE_NO_SYSCALL
+//#define TYCHE_NO_SYSCALL
 
 #define TYCHE_SOCKET_FD 14
 #define TYCHE_CONNECTION_FD 15
@@ -20,7 +20,12 @@ void tyche_debug(unsigned long long marker);
 int tyche_log(const char *format, ...);
 void tyche_log_char_buffer(char* buff, int size);
 
+#ifndef TYCHE_NO_SYSCALL
+#include <stdio.h>
+#define LOG printf
+#else
 #define LOG tyche_log
+#endif
 #define LOG_BYTES tyche_log_char_buffer
 
 int tyche_socket();
