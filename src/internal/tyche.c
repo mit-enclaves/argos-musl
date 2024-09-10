@@ -76,57 +76,59 @@ void tyche_debug(unsigned long long marker) {
 }
 
 long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
-
+#ifndef TYCHE_NO_SYSCALL
+    //LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
+#endif
     //if(a1 != fd_urandom) {
     //    LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
     //}
     switch (n) {
-        // case SYS_getpid:
-        //     return tyche_getpid();
-        // case SYS_gettid:
-        //     return tyche_gettid();
-        // case SYS_ioctl:
-        //     if (a2 == TIOCGWINSZ) {
-        //         return tyche_isatty(a1);
-        //     }
-        //     else {
-        //         tyche_suicide(0);
-        //         break;
-        //     }
-        // case SYS_getcwd:
-        //     return (long) tyche_getcwd((char *) a1, a2);
-        // case SYS_fcntl:
-        //     return tyche_fcntl(a1, a2);
-        // case SYS_open:
-        //     return tyche_open((const char *) a1, a2, a3, a4, a5, a6);
-        // case SYS_close:
-        //     return tyche_close(a1);
-        // case SYS_bind:
-        //     return tyche_bind(a1);
-        // case SYS_listen:
-        //     return tyche_listen(a1);
-        // case SYS_read:
-        //     return tyche_read(a1, (void *) a2, a3);
-        // case SYS_setsockopt:
-        //     return tyche_setsockopt(a1);
-        // case SYS_socket:
-        //     return tyche_socket();
-        // case SYS_select:
-        //     return tyche_select(a1, (void *) a2, (void *) a3);
-        // case SYS_gettimeofday:
-        //     return tyche_gettimeofday((void *) a1, (void *) a2);
-        // case SYS_write:
-        //     return tyche_write(a1, (void *) a2, a3);
-        // case SYS_writev:
-        //     return tyche_writev(a1, (void *) a2, a3);
+        case SYS_getpid:
+            return tyche_getpid();
+        case SYS_gettid:
+            return tyche_gettid();
+        case SYS_ioctl:
+            if (a2 == TIOCGWINSZ) {
+                return tyche_isatty(a1);
+            }
+            else {
+                tyche_suicide(0);
+                break;
+            }
+        case SYS_getcwd:
+            return (long) tyche_getcwd((char *) a1, a2);
+        case SYS_fcntl:
+            return tyche_fcntl(a1, a2);
+        case SYS_open:
+            return tyche_open((const char *) a1, a2, a3, a4, a5, a6);
+        case SYS_close:
+            return tyche_close(a1);
+        case SYS_bind:
+            return tyche_bind(a1);
+        case SYS_listen:
+            return tyche_listen(a1);
+        case SYS_read:
+            return tyche_read(a1, (void *) a2, a3);
+        case SYS_setsockopt:
+            return tyche_setsockopt(a1);
+        case SYS_socket:
+            return tyche_socket();
+        case SYS_select:
+            return tyche_select(a1, (void *) a2, (void *) a3);
+        case SYS_gettimeofday:
+            return tyche_gettimeofday((void *) a1, (void *) a2);
+        case SYS_write:
+            return tyche_write(a1, (void *) a2, a3);
+        case SYS_writev:
+            return tyche_writev(a1, (void *) a2, a3);
         case SYS_mmap:
             return (long) tyche_mmap((void *) a1, a2, a3, a4, a5, a6);
         case SYS_munmap:
             return tyche_munmap((void *) a1, a2);
-        // case SYS_brk:
-        //    return tyche_brk((void *) a1);
-        // case SYS_rt_sigprocmask:
-        //     return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
+        case SYS_brk:
+            return tyche_brk((void *) a1);
+        case SYS_rt_sigprocmask:
+            return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
         case SYS_exit_group:
         case SYS_exit:
         case SYS_tkill:
@@ -134,9 +136,12 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             print_allocation_info();
             print_mempool_state();
             #endif
-            //tyche_exit(a1);
-            //break;
+            tyche_exit(a1);
+            break;
         default:
+            #ifdef TYCHE_NO_SYSCALL
+            tyche_suicide(0);
+            #else
             unsigned long ret;
             register long r10 __asm__("r10") = a4;
             register long r8 __asm__("r8") = a5;
@@ -144,6 +149,7 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
             					  "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
             return ret;
+            #endif
     }
     return 0;
 }

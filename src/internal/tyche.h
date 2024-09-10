@@ -10,7 +10,7 @@
 #include <stdarg.h>
 
 // Comment/uncomment to enable or disable syscalls
-//#define TYCHE_NO_SYSCALL
+#define TYCHE_NO_SYSCALL
 
 #define TYCHE_SOCKET_FD 14
 #define TYCHE_CONNECTION_FD 15
