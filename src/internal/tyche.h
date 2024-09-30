@@ -49,6 +49,7 @@ int tyche_munmap(void* start, size_t len);
 size_t tyche_brk(void* end);
 ssize_t tyche_writev(int fd, const struct iovec* iov, int count);
 int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t sigsetsize);
+int tyche_futex(int *uaddr, int futex_op, int val, void *timeout, int *uaddr2, int val3);
 void tyche_suicide(unsigned int v);
 void tyche_exit(int ec);
 long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6);

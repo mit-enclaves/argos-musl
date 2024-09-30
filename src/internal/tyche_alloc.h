@@ -29,19 +29,15 @@
 #define HEADER_SIZE 8
 
 /*
- * The minimum allocation size is 0x1000 because we only allocate pages
+ * The minimum allocation size a page
  */
 #define MIN_ALLOC_LOG2 PAGE_SHIFT
 #define MIN_ALLOC ((size_t)1 << MIN_ALLOC_LOG2)
 
 /*
- * The maximum allocation size is currently set to 2gb. This is the total size
- * of the mempool. It's technically also the maximum allocation size because the
- * mempool could consist of a single allocation of this size. But of course real
- * mempool will have multiple allocations, so the real maximum allocation limit
- * is at most 1gb.
+ * The maximum allocation size is currently set to 256MB
  */
-#define MAX_ALLOC_LOG2 31
+#define MAX_ALLOC_LOG2 28
 #define MAX_ALLOC ((size_t)1 << MAX_ALLOC_LOG2)
 
 void *alloc_segment(size_t request);

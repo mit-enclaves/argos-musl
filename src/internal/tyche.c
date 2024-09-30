@@ -78,6 +78,20 @@ void tyche_debug(unsigned long long marker) {
 long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
 #ifndef TYCHE_NO_SYSCALL
     //LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
+    switch (n) {
+        case SYS_mmap:
+            return (long) tyche_mmap((void *) a1, a2, a3, a4, a5, a6);
+        case SYS_munmap:
+            return tyche_munmap((void *) a1, a2);
+        default:
+            	unsigned long ret;
+                register long r10 __asm__("r10") = a4;
+                register long r8 __asm__("r8") = a5;
+                register long r9 __asm__("r9") = a6;
+                __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+                					  "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+                return ret;
+    }
 #endif
     //if(a1 != fd_urandom) {
     //    LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
@@ -92,7 +106,7 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
                 return tyche_isatty(a1);
             }
             else {
-                tyche_suicide(0);
+                tyche_suicide(2);
                 break;
             }
         case SYS_getcwd:
@@ -129,6 +143,8 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             return tyche_brk((void *) a1);
         case SYS_rt_sigprocmask:
             return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
+        case SYS_futex:
+            return tyche_futex((void *) a1, a2, a3, (void *) a4, (void *) a5, a6);
         case SYS_exit_group:
         case SYS_exit:
         case SYS_tkill:
@@ -140,7 +156,7 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             break;
         default:
             #ifdef TYCHE_NO_SYSCALL
-            tyche_suicide(0);
+            tyche_suicide(n);
             #else
             unsigned long ret;
             register long r10 __asm__("r10") = a4;
@@ -285,7 +301,7 @@ int tyche_fcntl(int fd, int flags) {
         }
     }
     else {
-        tyche_suicide(0);
+        tyche_suicide(1);
     }
     return 0;
 }
@@ -412,6 +428,12 @@ ssize_t tyche_writev(int fd, const struct iovec *iov, int count) {
 }
 
 int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t sigsetsize) {
+    // TODO: Implement if needed
+    return 0;
+}
+
+int tyche_futex(int *uaddr, int futex_op, int val, void *timeout, int *uaddr2, int val3) {
+
     // TODO: Implement if needed
     return 0;
 }
