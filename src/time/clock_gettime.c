@@ -55,21 +55,9 @@ static void *volatile vdso_func = (void *)cgt_init;
 
 #endif
 
-#ifdef TYCHE_NO_SYSCALL
-static unsigned long long tyche_monotonic = 0;
-#endif
-
 int __clock_gettime(clockid_t clk, struct timespec *ts)
 {
 	int r;
-
-#ifdef TYCHE_NO_SYSCALL
-  if (ts != NULL) {
-    ts->tv_sec = tyche_monotonic++;
-    ts->tv_nsec = 0;
-  }
-  return 0;
-#endif
 
 #ifdef VDSO_CGT_SYM
 	int (*f)(clockid_t, struct timespec *) =

@@ -14,7 +14,7 @@
 #define PAGE_SIZE ((size_t)1 << PAGE_SHIFT) // 0x1000
 #endif
 
-#define NB_PAGES  (800 * 32)
+#define NB_PAGES (6400)
 
 #define MEMPOOL_ADDR 0x700000
 

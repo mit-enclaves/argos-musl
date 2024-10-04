@@ -10,7 +10,11 @@
 #include <stdarg.h>
 
 // Comment/uncomment to enable or disable syscalls
-#define TYCHE_NO_SYSCALL
+//#define RUN_WITHOUT_TYCHE
+#ifndef RUN_WITHOUT_TYCHE
+#define RUN_WITH_TYCHE
+#endif
+
 
 #define TYCHE_SOCKET_FD 14
 #define TYCHE_CONNECTION_FD 15
@@ -20,7 +24,7 @@ void tyche_debug(unsigned long long marker);
 int tyche_log(const char *format, ...);
 void tyche_log_char_buffer(char* buff, int size);
 
-#ifndef TYCHE_NO_SYSCALL
+#ifdef RUN_WITHOUT_TYCHE
 #include <stdio.h>
 #define LOG printf
 #else
@@ -49,7 +53,6 @@ int tyche_munmap(void* start, size_t len);
 size_t tyche_brk(void* end);
 ssize_t tyche_writev(int fd, const struct iovec* iov, int count);
 int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t sigsetsize);
-int tyche_futex(int *uaddr, int futex_op, int val, void *timeout, int *uaddr2, int val3);
 void tyche_suicide(unsigned int v);
 void tyche_exit(int ec);
 long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6);

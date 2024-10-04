@@ -19,12 +19,11 @@
 
 RB_DECLARE_ALL(char);
 
-#ifndef TYCHE_NO_SYSCALL
+#ifdef RUN_WITHOUT_TYCHE
 #define RB_SIZE 100
 static char read_queue_buff[RB_SIZE];
 static rb_char_t read_queue;
 static int read_queue_is_init = 0;
-
 #else
 
 #define MSG_BUFFER_SIZE 1048
@@ -61,9 +60,9 @@ int most_recent_fd = 1234;
 int fd_urandom = 0;
 
 void tyche_debug(unsigned long long marker) {
-    LOG("Tyche Debug:\n");
-#ifndef TYCHE_NO_SYSCALL
-    printf("Tyche Debug :)\n");
+    LOG("Tyche Debug: marker 0x%llx\n", marker);
+#ifdef RUN_WITHOUT_TYCHE
+    __asm__ __volatile__ ("syscall" : : "a"(SYS_exit), "D"(0): "rcx", "r11", "memory");
 #else
   __asm__ __volatile__ (
       "movq %0, %%rdi\n\t"
@@ -76,26 +75,9 @@ void tyche_debug(unsigned long long marker) {
 }
 
 long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
-#ifndef TYCHE_NO_SYSCALL
+    #ifdef RUN_WITH_TYCHE
     //LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
-    switch (n) {
-        case SYS_mmap:
-            return (long) tyche_mmap((void *) a1, a2, a3, a4, a5, a6);
-        case SYS_munmap:
-            return tyche_munmap((void *) a1, a2);
-        default:
-            	unsigned long ret;
-                register long r10 __asm__("r10") = a4;
-                register long r8 __asm__("r8") = a5;
-                register long r9 __asm__("r9") = a6;
-                __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
-                					  "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
-                return ret;
-    }
-#endif
-    //if(a1 != fd_urandom) {
-    //    LOG("Syscall %lld with args %lld, %lld, %lld, %lld, %lld, %lld\n", n, a1, a2, a3, a4, a5, a6);
-    //}
+    #endif
     switch (n) {
         case SYS_getpid:
             return tyche_getpid();
@@ -143,8 +125,6 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             return tyche_brk((void *) a1);
         case SYS_rt_sigprocmask:
             return tyche_rt_sigprocmask(a1, (void *) a2, (void *) a3, a4);
-        case SYS_futex:
-            return tyche_futex((void *) a1, a2, a3, (void *) a4, (void *) a5, a6);
         case SYS_exit_group:
         case SYS_exit:
         case SYS_tkill:
@@ -155,7 +135,7 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             tyche_exit(a1);
             break;
         default:
-            #ifdef TYCHE_NO_SYSCALL
+            #ifdef RUN_WITH_TYCHE
             tyche_suicide(n);
             #else
             unsigned long ret;
@@ -243,7 +223,7 @@ int tyche_socket() {
 }
 
 int tyche_setsockopt(int fd) {
-    printf("setsockopt: %d\n", fd);
+    LOG("setsockopt: %d\n", fd);
     // Ignore all options
     return 0;
 }
@@ -261,7 +241,7 @@ int tyche_listen(int fd) {
 int tyche_accept(int fd) {
     // Initialize read queue so that the socket has some content
 
-#ifndef TYCHE_NO_SYSCALL
+#ifdef RUN_WITHOUT_TYCHE
     if (!read_queue_is_init) {
         memset(read_queue_buff, 0, sizeof(char) * RB_SIZE);
         rb_char_init(&read_queue, RB_SIZE, read_queue_buff);
@@ -269,13 +249,13 @@ int tyche_accept(int fd) {
 
         // Put initial commands
         char *cmds = "PING\r\nSET A 666\r\nCOMMAND\r\nGET A\r\n";
-        printf("Commands:\n%s", cmds);
+        LOG("Commands:\n%s", cmds);
         rb_char_write_n(&read_queue, strlen(cmds), cmds);
     }
 #endif
 
     if (!connection_accepted) {
-        printf("Accepting connection\n");
+        LOG("Accepting connection\n");
         connection_accepted = 1;
         return TYCHE_CONNECTION_FD;
     } else {
@@ -287,16 +267,16 @@ int tyche_accept(int fd) {
 int tyche_fcntl(int fd, int flags) {
     if (fd == TYCHE_CONNECTION_FD) {
         if (flags == F_GETFL) {
-            printf("  F_GETFL\n");
+            LOG("  F_GETFL\n");
             return  0x2; // Access rights for the connection
         } else if (flags == F_SETFL) {
-            printf("  F_SETFL\n");
+            LOG("  F_SETFL\n");
             return 0;
         } else if (flags == F_GETFD) {
-            printf("  F_GETFD\n");
+            LOG("  F_GETFD\n");
             return 0;
         } else if (flags == F_SETFD) {
-            printf("  F_SETFD\n");
+            LOG("  F_SETFD\n");
             return 0;
         }
     }
@@ -307,18 +287,18 @@ int tyche_fcntl(int fd, int flags) {
 }
 
 int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
-    //printf("Tyche select\n");
+    //LOG("Tyche select\n");
 
-    //printf("Read set:\n");
+    //LOG("Read set:\n");
     for (int i = 0; i < 32; i++) {
         if (FD_ISSET(i, rfds)) {
-            //printf("  %d\n", i);
+            //LOG("  %d\n", i);
         }
     }
-    //printf("Write set:\n");
+    //LOG("Write set:\n");
     for (int i = 0; i < 32; i++) {
         if (FD_ISSET(i, wfds)) {
-            //printf("  %d\n", i);
+            //LOG("  %d\n", i);
         }
     }
 
@@ -330,15 +310,15 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
         // Set the bit for the Tyche socket
         FD_SET(TYCHE_SOCKET_FD, rfds);
         connection_selected = 1;
-        //printf("Connection ready to accept\n");
+        //LOG("Connection ready to accept\n");
         return 1;
     } else {
-#ifndef TYCHE_NO_SYSCALL
+#ifdef RUN_WITHOUT_TYCHE
         unsigned long long count = 0;
         while(rb_char_is_empty(&read_queue)) {
             count += 1;
             if (count > 1000000) {
-                printf("No more messages, exiting\n");
+                LOG("No more messages, exiting\n");
                 while (1) {
                     exit(0);
                 }
@@ -349,7 +329,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
 #endif
         // We got some messages on the channel!
         FD_SET(TYCHE_CONNECTION_FD, rfds);
-        //printf("Channel ready to be read\n");
+        //LOG("Channel ready to be read\n");
         return 1;
         /* switch (state) { */
         /*     case TTS_INIT: */
@@ -357,7 +337,7 @@ int tyche_select(int n, fd_set *restrict rfds, fd_set *restrict wfds) {
         /*         state = TTS_START; */
         /*         break; */
         /*     default: */
-        /*         printf("Done testing, blocking on select\n"); */
+        /*         LOG("Done testing, blocking on select\n"); */
         /*         while (1) { */
         /*             exit(0); */
         /*         } */
@@ -383,9 +363,9 @@ size_t tyche_read(int fd, void *buff, size_t count) {
         int ret = tyche_random(buff, count);
         return ret;
     }
-#ifndef TYCHE_NO_SYSCALL
-  printf("Tyche read: %d, count: %d\n", fd, count);
-  int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
+#ifdef RUN_WITHOUT_TYCHE
+    LOG("Tyche read: %d, count: %d\n", fd, count);
+    int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
 #else
     int ret = rb_char_read_alias_n(&(app->to_seal), app->to_buffer, (int) count, (char *)buff);
 #endif
@@ -398,8 +378,13 @@ size_t tyche_read(int fd, void *buff, size_t count) {
 }
 
 size_t tyche_write(int fd, const void *buf, size_t count) {
-#ifndef TYCHE_NO_SYSCALL
-    printf("Tyche write:\n  %.*s", count, buf);
+#ifdef RUN_WITHOUT_TYCHE
+    unsigned long ret = -1;
+    if (fd == 1) {
+            __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(SYS_write), "D"(fd), "S"(buf),
+            					  "d"(count): "rcx", "r11", "memory");
+    }
+    return ret;
 #else
     int written = 0;
     char *source = (char *) buf;
@@ -412,15 +397,12 @@ size_t tyche_write(int fd, const void *buf, size_t count) {
       }
       written += res;
     }
-#endif
     return count;
+#endif
 }
 
 ssize_t tyche_writev(int fd, const struct iovec *iov, int count) {
     ssize_t n = 0;
-#ifndef TYCHE_NO_SYSCALL
-    printf("Tyche writev: count %d\n ", count);
-#endif
     for (int i = 0; i < count; i++) {
         n += tyche_write(fd, iov[i].iov_base, iov[i].iov_len);
     }
@@ -432,14 +414,8 @@ int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t 
     return 0;
 }
 
-int tyche_futex(int *uaddr, int futex_op, int val, void *timeout, int *uaddr2, int val3) {
-
-    // TODO: Implement if needed
-    return 0;
-}
-
 void tyche_suicide(unsigned int v) {
-  LOG("Entered tyche_suicide with value %d\n", v);
+  LOG("Entered tyche_suicide with value 0x%llx\n", v);
   int* suicide = (int *) 0xdeadbabe;
   tyche_debug(v);
   *suicide = v;
@@ -447,10 +423,8 @@ void tyche_suicide(unsigned int v) {
 
 
 void tyche_exit(int ec) {
-#ifndef TYCHE_NO_SYSCALL
-    printf("Tyche Debug :)\n");
-#else
     LOG("Tyche Exit\n");
+    /* // This call completely exit the machine
     __asm__ __volatile__ (
       "movq %0, %%rdi\n\t"
       "movq $9, %%rax\n\t"
@@ -458,8 +432,8 @@ void tyche_exit(int ec) {
       :
       : "rm" (ec)
       : "rax", "rdi", "memory");
-#endif
-tyche_suicide(0xdead);
+    */
+    tyche_suicide(0xdead);
 }
 
 // ——————————————————————————— Memory Management ———————————————————————————— //
@@ -479,12 +453,15 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
     }
     
     void* res = alloc_segment(len);
+    if(res == MAP_FAILED || res == NULL) { // Do not memset to 0 if the allocation failed
+        LOG("Called mmap for size %llx and returned error %d\n", len, res);
+        return res;
+    }
     
-    if(flags & MAP_ANONYMOUS) {
+    if((flags & MAP_ANONYMOUS)) {
         memset(res, 0, len);
     }
 
-    //LOG("Called mmap for size %llx and returned addr 0x%llx\n", len, res);
     return res;
 }
 

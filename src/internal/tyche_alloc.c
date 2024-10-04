@@ -15,6 +15,8 @@
  */
 
 #include "tyche_alloc.h"
+#include "syscall.h"
+#include <sys/mman.h>
 #include <stdbool.h>
 
 /*
@@ -324,6 +326,18 @@ static allocation_info_t* find_allocation(void *ptr) {
 }
 #endif
 
+#ifdef RUN_WITHOUT_TYCHE
+long mmap_no_tyche(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  unsigned long ret;
+  register long r10 __asm__("r10") = flags;
+  register long r8 __asm__("r8") = fd;
+  register long r9 __asm__("r9") = offset;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(SYS_mmap), "D"(addr), "S"(length),
+              "d"(prot), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+  return ret;
+}
+#endif
+
 void *alloc_segment(size_t request) {
   size_t original_bucket, bucket;
 
@@ -342,14 +356,23 @@ void *alloc_segment(size_t request) {
    * possible allocation size. More memory will be reserved later as needed.
    */
   if (base_ptr == NULL) {
-    #ifdef TYCHE_NO_SYSCALL
+    #ifdef RUN_WITHOUT_TYCHE // If not running inside Tyche, we allocate memory at the same location to ease debugging
+    uint8_t *mempool = (uint8_t *)mmap_no_tyche(
+        (void *)MEMPOOL_ADDR,           // addr
+        NB_PAGES * PAGE_SIZE,           // length
+        PROT_READ | PROT_WRITE,         // prot
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,  // flags
+        -1,                             // fd
+        0                               // offset
+    );
+
+    if (mempool == MAP_FAILED) {
+        // Handle error
+        return MAP_FAILED;
+    }
+    #endif
     base_ptr = (uint8_t*) MEMPOOL_ADDR;
     max_ptr = base_ptr + (NB_PAGES * PAGE_SIZE);
-    #else
-    static uint8_t mempool[NB_PAGES * PAGE_SIZE] __attribute__((aligned(0x1000))) = {0};
-    base_ptr = mempool;
-    max_ptr = base_ptr + (NB_PAGES * PAGE_SIZE); 
-    #endif
 
     bucket_limit = BUCKET_COUNT - 1;
     if(!update_max_ptr(base_ptr + sizeof(list_t))) {
