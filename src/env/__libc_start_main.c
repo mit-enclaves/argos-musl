@@ -78,10 +78,8 @@ int __libc_start_main(int (*main)(int,char **,char **), int argc, char **argv,
 	void (*init_dummy)(), void(*fini_dummy)(), void(*ldso_dummy)())
 {
 
-#ifdef TYCHE_NO_SYSCALL
 	argv = TYCHE_ARGV;
 	argc = 1;
-#endif
 
 	char **envp = argv+argc+1;
 
