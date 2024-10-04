@@ -366,7 +366,7 @@ void *alloc_segment(size_t request) {
         0                               // offset
     );
 
-    if (mempool == MAP_FAILED) {
+    if (mempool != (uint8_t*) MEMPOOL_ADDR) {
         // Handle error
         return MAP_FAILED;
     }
