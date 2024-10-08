@@ -50,6 +50,7 @@ char* tyche_getcwd(char* buf, size_t size);
 int tyche_isatty(int fd);
 void* tyche_mmap(void* start, size_t len, int prot, int flags, int fd, off_t off);
 int tyche_munmap(void* start, size_t len);
+int tyche_madvise(void *addr, size_t len, int advice);
 size_t tyche_brk(void* end);
 ssize_t tyche_writev(int fd, const struct iovec* iov, int count);
 int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t sigsetsize);

@@ -29,6 +29,30 @@
  */
 #define BUCKET_COUNT (MAX_ALLOC_LOG2 - MIN_ALLOC_LOG2 + 1)
 
+#if ALLOC_DEBUG == 1
+
+#define MAX_ALLOCATIONS 1000 // Adjust as needed
+
+typedef struct {
+    void *ptr;
+    size_t size;
+    bool is_used;
+} allocation_info_t;
+
+int max_allocations = 0;
+int current_allocation = 0;
+
+int max_allocations_blocks = 0;
+int current_allocation_blocks = 0;
+
+static allocation_info_t allocations[MAX_ALLOCATIONS] = {0};
+static int allocation_count = 0;
+
+static allocation_info_t* add_allocation(void *ptr, size_t size, bool is_used);
+static allocation_info_t* find_allocation(void *ptr);
+static size_t get_and_print_free_blocks_size();
+#endif
+
 /*
  * Free lists are stored as circular doubly-linked lists. Every possible
  * allocation size has an associated free list that is threaded through all
@@ -253,28 +277,10 @@ static int lower_bucket_limit(size_t bucket) {
       flip_parent_is_split(root);
     }
   }
-
   return 1;
 }
 
 #if ALLOC_DEBUG == 1
-
-#define MAX_ALLOCATIONS 1000 // Adjust as needed
-
-typedef struct {
-    void *ptr;
-    size_t size;
-    bool is_used;
-} allocation_info_t;
-
-int max_allocations = 0;
-int current_allocation = 0;
-
-int max_allocations_blocks = 0;
-int current_allocation_blocks = 0;
-
-static allocation_info_t allocations[MAX_ALLOCATIONS] = {0};
-static int allocation_count = 0;
 
 static allocation_info_t* add_allocation(void *ptr, size_t size, bool is_used) {
     for (int i = 0; i < allocation_count; i++) {
@@ -324,6 +330,43 @@ static allocation_info_t* find_allocation(void *ptr) {
     }
     return NULL; // No space left to track allocations
 }
+
+static size_t get_and_print_full_blocks_size() {
+    size_t total_occupied = 0;
+
+    for (int i = 0; i < MAX_ALLOCATIONS; i++) {
+        allocation_info_t *info = &allocations[i];
+        if(info->is_used) {
+            size_t block_size = info->size;
+            total_occupied += block_size;
+            LOG("%zu full blocks in bucket %d: 0x%llx bytes\n", 1, bucket_for_request(block_size), block_size);
+        }
+    }
+    return total_occupied;
+}
+
+static size_t get_and_print_free_blocks_size() {
+    size_t total_free = 0;
+
+    for (int i = bucket_limit; i < BUCKET_COUNT; i++) {
+        size_t block_size = (size_t)1 << (MAX_ALLOC_LOG2 - i);
+        size_t free_blocks = 0;
+        list_t *current = buckets[i].next;
+        
+        while (current != &buckets[i]) {
+            free_blocks++;
+            current = current->next;
+        }
+        
+        size_t free_size = free_blocks * block_size;
+        total_free += free_size;
+        
+        LOG("%zu free blocks in bucket %d: 0x%llx bytes\n", free_blocks, i, free_size);
+    }
+
+    return total_free;
+}
+
 #endif
 
 #ifdef RUN_WITHOUT_TYCHE
@@ -359,7 +402,7 @@ void *alloc_segment(size_t request) {
     #ifdef RUN_WITHOUT_TYCHE // If not running inside Tyche, we allocate memory at the same location to ease debugging
     uint8_t *mempool = (uint8_t *)mmap_no_tyche(
         (void *)MEMPOOL_ADDR,           // addr
-        NB_PAGES * PAGE_SIZE,           // length
+        MEMPOOL_SIZE,           // length
         PROT_READ | PROT_WRITE,         // prot
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,  // flags
         -1,                             // fd
@@ -372,7 +415,7 @@ void *alloc_segment(size_t request) {
     }
     #endif
     base_ptr = (uint8_t*) MEMPOOL_ADDR;
-    max_ptr = base_ptr + (NB_PAGES * PAGE_SIZE);
+    max_ptr = base_ptr + (MEMPOOL_SIZE);
 
     bucket_limit = BUCKET_COUNT - 1;
     if(!update_max_ptr(base_ptr + sizeof(list_t))) {
@@ -380,6 +423,16 @@ void *alloc_segment(size_t request) {
     }
     list_init(&buckets[BUCKET_COUNT - 1]);
     list_push(&buckets[BUCKET_COUNT - 1], (list_t *)base_ptr);
+    #if ALLOC_DEBUG == 1
+    LOG("Mempool size vs max alloc: 0x%llx vs 0x%llx\n", MEMPOOL_SIZE, MAX_ALLOC);
+    LOG("Mempool metadata is 0x%llx bytes\n", sizeof(buckets) + sizeof(node_is_split));
+    if(MEMPOOL_SIZE < MAX_ALLOC) {
+        LOG("Mempool size is less than max alloc, some mempool metadata state will not be allocated\n");
+    }
+    if(MEMPOOL_SIZE > MAX_ALLOC) {
+        LOG("Mempool size is greater than max alloc, some allocated memory won't be used\n");
+    }
+    #endif
   }
 
   /*
@@ -443,7 +496,7 @@ void *alloc_segment(size_t request) {
     if (!update_max_ptr(ptr + bytes_needed)) {
       list_push(&buckets[bucket], (list_t *)ptr);
 #if ALLOC_DEBUG == 1
-      print_mempool_state();
+      print_allocation_info();
 #endif
       return MAP_FAILED;
     }
@@ -576,33 +629,20 @@ int free_segment(void *ptr, size_t len) {
 #if ALLOC_DEBUG == 1
 // Add a function to print allocation info
 void print_allocation_info() {
-    LOG("Current Allocations:\n");
-    for (int i = 0; i < allocation_count; i++) {
-        if (allocations[i].is_used) {
-            LOG("Address: %p, Size: %zu, Status: %s\n", 
-            allocations[i].ptr, 
-            allocations[i].size, 
-            allocations[i].is_used ? "Used" : "Freed");
-        }
-    }
-    LOG("Max Allocations: %lx\n", max_allocations);
-    LOG("Max Allocations Blocks: %lx\n", max_allocations_blocks);
-    LOG("Max Size Tree: %lx\n", NB_PAGES * PAGE_SIZE);
-}
+    
+    get_and_print_full_blocks_size();
+    size_t free_blocks_size = get_and_print_free_blocks_size();
+    size_t size_tree = (size_t)1 << (MAX_ALLOC_LOG2 - bucket_limit);
 
-void print_mempool_state() {
-  for (int i = 0; i < BUCKET_COUNT; i++) {
-    size_t block_size = (size_t)1 << (MAX_ALLOC_LOG2 - i);
-    size_t free_blocks = 0;
-    list_t *current = buckets[i].next;
-    
-    // Count free blocks in this bucket
-    while (current != 0 && current != &buckets[i]) {
-      free_blocks++;
-      current = current->next;
-    }
-    
-    LOG("Bucket %d (size %llx): %zu free blocks\n", i, block_size, free_blocks);
-  }
+    LOG("Current allocation vs max allocation: 0x%llx / 0x%llx = %f\n", current_allocation, max_allocations, ((float)current_allocation / (float)max_allocations) * 100);
+    LOG("Mempool utilisation: 0x%llx / 0x%llx = %f\n", current_allocation, size_tree, ((float)current_allocation / (float)size_tree) * 100);
+    LOG("Lost to rounding up: 0x%llx = %f\n", current_allocation_blocks - current_allocation, ((float)(current_allocation_blocks - current_allocation) / (float)size_tree) * 100);
+    LOG("Free and available memory: 0x%llx = %f\n", free_blocks_size, ((float)free_blocks_size / (float)(size_tree)) * 100);
+
+    LOG("All time statistics:\n");
+    LOG("Max Size Tree: 0x%lx\n", size_tree);
+    LOG("Max Mempool utilisation: 0x%llx / 0x%llx = %f\n", max_allocations, size_tree, ((float)max_allocations / (float)size_tree) * 100);
+    LOG("Max Mempool utilisation with rounding up: 0x%llx / 0x%llx = %f\n", max_allocations_blocks, size_tree, ((float)max_allocations_blocks / (float)size_tree) * 100);
+    LOG("Lost to rounding up: 0x%llx = %f\n", max_allocations_blocks - max_allocations, ((float)(max_allocations_blocks - max_allocations) / (float)size_tree) * 100);
 }
 #endif

@@ -16,6 +16,7 @@
 #include "tyche_rb.h"
 #include "tyche_alloc.h"
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 
 RB_DECLARE_ALL(char);
 
@@ -121,6 +122,8 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             return (long) tyche_mmap((void *) a1, a2, a3, a4, a5, a6);
         case SYS_munmap:
             return tyche_munmap((void *) a1, a2);
+        case SYS_madvise:
+            return tyche_madvise((void *) a1, a2, a3);
         case SYS_brk:
             return tyche_brk((void *) a1);
         case SYS_rt_sigprocmask:
@@ -130,7 +133,6 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
         case SYS_tkill:
             #if ALLOC_DEBUG == 1
             print_allocation_info();
-            print_mempool_state();
             #endif
             tyche_exit(a1);
             break;
@@ -436,6 +438,21 @@ void tyche_exit(int ec) {
     tyche_suicide(0xdead);
 }
 
+int tyche_madvise(void *addr, size_t len, int advice) {
+    switch (advice) {
+        case 0x8: //MADV_FREE
+            // Mark the pages as candidates for reclaiming if memory pressure occurs
+            // but don't actually free them yet
+            memset(addr, 0, len);  // Zero out the memory
+            return 0;
+        case 0x4: //MADV_DONTNEED
+            return tyche_munmap(addr, len);
+        default:
+            // Ignore other advice types for now
+            return 0;
+    }
+}
+
 // ——————————————————————————— Memory Management ———————————————————————————— //
 
 
@@ -454,20 +471,31 @@ void *tyche_mmap(void *start, size_t len, int prot, int flags, int fd, off_t off
     
     void* res = alloc_segment(len);
     if(res == MAP_FAILED || res == NULL) { // Do not memset to 0 if the allocation failed
-        LOG("Called mmap for size %llx and returned error %d\n", len, res);
+        LOG("Called mmap for size 0x%llx and returned error %d\n", len, res);
         return res;
     }
     
     if((flags & MAP_ANONYMOUS)) {
-        memset(res, 0, len);
+        // Need to round up the size to the nearest page size
+        // and zero out the entire allocated memory.
+        size_t size_allocated = ((len + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
+        memset(res, 0, size_allocated);
     }
+
+    #if ALLOC_DEBUG == 1
+    //LOG("mmap for size 0x%llx at addr 0x%llx\n", len, res);
+    #endif
 
     return res;
 }
 
 int tyche_munmap(void *start, size_t len) {
     int ret = free_segment(start, len);
+    
+    #if ALLOC_DEBUG == 1
     //LOG("munmap for size %llx at addr 0x%llx\n", len, start);
+    #endif
+
     return ret;
 }
 

@@ -14,9 +14,10 @@
 #define PAGE_SIZE ((size_t)1 << PAGE_SHIFT) // 0x1000
 #endif
 
-#define NB_PAGES (6400)
+#define NB_PAGES (0x80000)
 
-#define MEMPOOL_ADDR 0x700000
+#define MEMPOOL_SIZE (PAGE_SIZE * NB_PAGES)
+#define MEMPOOL_ADDR 0x900000
 
 #define MAP_FAILED ((void *) -1)
 
@@ -35,15 +36,14 @@
 #define MIN_ALLOC ((size_t)1 << MIN_ALLOC_LOG2)
 
 /*
- * The maximum allocation size is currently set to 256MB
+ * The maximum allocation size is currently set to 2GB
  */
-#define MAX_ALLOC_LOG2 28
+#define MAX_ALLOC_LOG2 31
 #define MAX_ALLOC ((size_t)1 << MAX_ALLOC_LOG2)
 
 void *alloc_segment(size_t request);
 int free_segment(void *ptr, size_t len);
 
 #if ALLOC_DEBUG == 1
-void print_mempool_state();
 void print_allocation_info();
 #endif
