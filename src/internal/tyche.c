@@ -225,8 +225,8 @@ int tyche_clock_gettime(int clock_id, struct timespec *tp) {
     unsigned int lo,hi;
     __asm__ __volatile__ ("lfence;rdtsc;lfence" : "=a" (lo), "=d" (hi) :: "memory");
     long long tsc = ((long long)hi << 32) | lo;
-    tp->tv_sec = tsc / 1000000000LL;
-    tp->tv_nsec = tsc % 1000000000LL;
+    tp->tv_sec = tsc / 3600000000LL;
+    tp->tv_nsec = (uint64_t) ((double) tsc / 3.6);
     return 0;
 }
 
