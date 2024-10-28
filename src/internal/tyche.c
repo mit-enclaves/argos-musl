@@ -44,7 +44,6 @@ typedef struct seal_app_t {
 // This is all part of the shared state introduced by tychools.
 // The untrusted code is responsible for initializing the channels.
 static seal_app_t * app = (seal_app_t*) TYCHE_SHARED_ADDR;
-static int read_queue_is_init = 1;
 #endif
 
 enum tyche_test_state {
@@ -114,6 +113,8 @@ long tyche_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
             return tyche_select(a1, (void *) a2, (void *) a3);
         case SYS_gettimeofday:
             return tyche_gettimeofday((void *) a1, (void *) a2);
+        case SYS_clock_gettime:
+            return tyche_clock_gettime(a1, (void *) a2);
         case SYS_write:
             return tyche_write(a1, (void *) a2, a3);
         case SYS_writev:
@@ -216,6 +217,16 @@ char *tyche_getcwd(char *buf, size_t size) {
 int tyche_gettimeofday(struct timeval *restrict tv, void *restrict tz) {
     tv->tv_sec = 0;
     tv->tv_usec = 0;
+    return 0;
+}
+
+int tyche_clock_gettime(int clock_id, struct timespec *tp) {
+    // TODO: How to correctly convert rdtsc to timespec?
+    unsigned int lo,hi;
+    __asm__ __volatile__ ("lfence;rdtsc;lfence" : "=a" (lo), "=d" (hi) :: "memory");
+    long long tsc = ((long long)hi << 32) | lo;
+    tp->tv_sec = tsc / 1000000000LL;
+    tp->tv_nsec = tsc % 1000000000LL;
     return 0;
 }
 

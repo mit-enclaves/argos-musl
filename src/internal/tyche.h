@@ -44,6 +44,7 @@ int tyche_close(int fd);
 size_t tyche_read(int fd, void* buff, size_t count);
 size_t tyche_write(int fd, const void* buf, size_t count);
 int tyche_gettimeofday(struct timeval* restrict tv, void* restrict tz);
+int tyche_clock_gettime(int clock_id, struct timespec *tp);
 pid_t tyche_getpid(void);
 pid_t tyche_gettid(void);
 char* tyche_getcwd(char* buf, size_t size);

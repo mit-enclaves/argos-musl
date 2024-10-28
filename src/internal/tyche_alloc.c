@@ -296,9 +296,11 @@ static allocation_info_t* add_allocation(void *ptr, size_t size, bool is_used) {
             }
             size_t size_block = (size_t)1 << (MAX_ALLOC_LOG2 - bucket_for_request(size));
             current_allocation_blocks += size_block;
+            //LOG("Current allocation vs current_allocation_blocks: 0x%llx vs 0x%llx\n", size, size_block);
             if(current_allocation_blocks > max_allocations_blocks) {
                 max_allocations_blocks = current_allocation_blocks;
             }
+          //LOG("Max allocation vs max_allocations_blocks: 0x%llx vs 0x%llx\n", current_allocation, current_allocation_blocks);
             return &allocations[i];
         }
     }
@@ -312,9 +314,11 @@ static allocation_info_t* add_allocation(void *ptr, size_t size, bool is_used) {
         }
         size_t size_block = (size_t)1 << (MAX_ALLOC_LOG2 - bucket_for_request(size));
         current_allocation_blocks += size_block;
+        //LOG("Current allocation vs current_allocation_blocks: 0x%llx vs 0x%llx\n", size, size_block);
         if(current_allocation_blocks > max_allocations_blocks) {
             max_allocations_blocks = current_allocation_blocks;
         }
+        //LOG("Max allocation vs max_allocations_blocks: 0x%llx vs 0x%llx\n", current_allocation, current_allocation_blocks);
         return &allocations[allocation_count++];
     }
     return NULL; // No space left to track allocations
