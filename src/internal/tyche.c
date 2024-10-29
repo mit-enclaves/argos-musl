@@ -18,6 +18,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
+
 RB_DECLARE_ALL(char);
 
 #ifdef RUN_WITHOUT_TYCHE
@@ -215,18 +216,20 @@ char *tyche_getcwd(char *buf, size_t size) {
 }
 
 int tyche_gettimeofday(struct timeval *restrict tv, void *restrict tz) {
-    tv->tv_sec = 0;
-    tv->tv_usec = 0;
+        unsigned int aux;
+    long long tsc = __builtin_ia32_rdtscp(&aux);
+    tsc = tsc / 3600; // Processor is 3.6GHz
+    tv->tv_sec  = tsc / 1000000LL;
+    tv->tv_usec = tsc % 1000000LL;
     return 0;
 }
 
 int tyche_clock_gettime(int clock_id, struct timespec *tp) {
-    // TODO: How to correctly convert rdtsc to timespec?
-    unsigned int lo,hi;
-    __asm__ __volatile__ ("lfence;rdtsc;lfence" : "=a" (lo), "=d" (hi) :: "memory");
-    long long tsc = ((long long)hi << 32) | lo;
-    tp->tv_sec = tsc / 3600000000LL;
-    tp->tv_nsec = (uint64_t) ((double) tsc / 3.6);
+    unsigned int aux;
+    long long tsc = __builtin_ia32_rdtscp(&aux);
+    tsc = (tsc * 10) / 36; // Processor is 3.6GHz
+    tp->tv_sec = tsc / 1000000000LL;
+    tp->tv_nsec = tsc % 1000000000LL;
     return 0;
 }
 
