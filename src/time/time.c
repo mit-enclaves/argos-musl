@@ -1,6 +1,8 @@
 #include <time.h>
 #include "syscall.h"
 
+#include "../internal/tyche.h"
+
 time_t time(time_t *t)
 {
 	struct timespec ts;

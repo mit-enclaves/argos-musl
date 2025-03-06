@@ -4,6 +4,8 @@
 #include "syscall.h"
 #include "atomic.h"
 
+#include "../internal/tyche.h"
+
 #ifdef VDSO_CGT_SYM
 
 static void *volatile vdso_func;

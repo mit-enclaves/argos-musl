@@ -7,6 +7,8 @@
 #include "atomic.h"
 #include "libc.h"
 
+#include "../internal/tyche.h"
+
 static void dummy(void) {}
 weak_alias(dummy, _init);
 
@@ -69,9 +71,16 @@ weak_alias(libc_start_init, __libc_start_init);
 typedef int lsm2_fn(int (*)(int,char **,char **), int, char **);
 static lsm2_fn libc_start_main_stage2;
 
+// Building argv -> envp.
+static char* TYCHE_ARGV[6] = {"seal_enclave", NULL, "LANGUAGE=en_GB:en", "LANG=C.UTF-8", NULL, NULL};
+
 int __libc_start_main(int (*main)(int,char **,char **), int argc, char **argv,
 	void (*init_dummy)(), void(*fini_dummy)(), void(*ldso_dummy)())
 {
+
+	argv = TYCHE_ARGV;
+	argc = 1;
+
 	char **envp = argv+argc+1;
 
 	/* External linkage, and explicit noinline attribute if available,
