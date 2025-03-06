@@ -14,7 +14,7 @@
 #define PAGE_SIZE ((size_t)1 << PAGE_SHIFT) // 0x1000
 #endif
 
-#define NB_PAGES (0x80000)
+#define NB_PAGES (0x100000)
 
 #define MEMPOOL_SIZE (PAGE_SIZE * NB_PAGES)
 #define MEMPOOL_ADDR 0x900000
@@ -38,7 +38,7 @@
 /*
  * The maximum allocation size is currently set to 2GB
  */
-#define MAX_ALLOC_LOG2 31
+#define MAX_ALLOC_LOG2 33
 #define MAX_ALLOC ((size_t)1 << MAX_ALLOC_LOG2)
 
 void *alloc_segment(size_t request);

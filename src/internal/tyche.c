@@ -216,9 +216,10 @@ char *tyche_getcwd(char *buf, size_t size) {
 }
 
 int tyche_gettimeofday(struct timeval *restrict tv, void *restrict tz) {
-        unsigned int aux;
-    long long tsc = __builtin_ia32_rdtscp(&aux);
-    tsc = tsc / 3600; // Processor is 3.6GHz
+    unsigned long lo, hi;
+    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    long long tsc = lo | ((uint64_t)hi << 32);
+    //tsc = tsc / 3600; // Processor is 3.6GHz
     tv->tv_sec  = tsc / 1000000LL;
     tv->tv_usec = tsc % 1000000LL;
     return 0;
@@ -375,23 +376,24 @@ int tyche_close(int fd) {
 }
 
 size_t tyche_read(int fd, void *buff, size_t count) {
-    if (fd == fd_urandom) {
+    //if (fd == fd_urandom) {
         int ret = tyche_random(buff, count);
         return ret;
-    }
-#ifdef RUN_WITHOUT_TYCHE
-    LOG("Tyche read: %d, count: %d\n", fd, count);
-    int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
-#else
-    int ret = rb_char_read_alias_n(&(app->to_seal), app->to_buffer, (int) count, (char *)buff);
-#endif
-    if (ret == FAILURE) {
-      tyche_suicide(101);
-      errno = EAGAIN;
-      return 0;
-    }
-    return ret;
+    //}
 }
+// #ifdef RUN_WITHOUT_TYCHE
+//     LOG("Tyche read: %d, count: %d\n", fd, count);
+//     int ret = rb_char_read_n(&read_queue, (int) count, (char *)buff);
+// #else
+//     int ret = rb_char_read_alias_n(&(app->to_seal), app->to_buffer, (int) count, (char *)buff);
+// #endif
+//     if (ret == FAILURE) {
+//       tyche_suicide(101);
+//       errno = EAGAIN;
+//       return 0;
+//     }
+//     return ret;
+// }
 
 size_t tyche_write(int fd, const void *buf, size_t count) {
 #ifdef RUN_WITHOUT_TYCHE
@@ -513,27 +515,33 @@ int tyche_munmap(void *start, size_t len) {
     return ret;
 }
 
-#define BRK_NB_PAGES 20
-static char brk_pool[BRK_NB_PAGES * PAGE_SIZE];
-static char *brk_cursor;
-static int brk_is_init = 0;
+#define BRK_INITIAL_PAGES 1024  // Start with more pages
+#define MAX_BRK_PAGES 262144    // 1GB max (262144 * 4KB)
+static char *brk_start = NULL;
+static char *brk_cursor = NULL;
 
 size_t tyche_brk(void *end) {
     // Initialize if needed
-    if (!brk_is_init) {
-        brk_cursor = brk_pool;
-        brk_is_init = 1;
+    if (!brk_start) {
+        // Allocate the maximum brk space up front at a fixed location
+        brk_start = alloc_segment(MAX_BRK_PAGES * PAGE_SIZE);
+        if (brk_start == MAP_FAILED) {
+            return -ENOMEM;
+        }
+        brk_cursor = brk_start;
+        return (size_t)brk_cursor;
     }
 
     if (end == NULL) {
         return (size_t)brk_cursor;
     }
 
-    if ((size_t)end > (size_t)brk_pool + BRK_NB_PAGES * PAGE_SIZE || (size_t)end < (size_t)brk_pool) {
-        LOG("Invalid brk!!!\n");
+    // Validate boundaries
+    if ((size_t)end < (size_t)brk_start || 
+        (size_t)end > (size_t)(brk_start + MAX_BRK_PAGES * PAGE_SIZE)) {
         return -ENOMEM;
-    } else {
-        brk_cursor = end;
-        return (size_t)end;
     }
+
+    brk_cursor = end;
+    return (size_t)brk_cursor;
 }
