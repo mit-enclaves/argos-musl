@@ -434,7 +434,7 @@ int tyche_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t 
 
 void tyche_suicide(unsigned int v) {
   LOG("Entered tyche_suicide with value 0x%llx\n", v);
-  int* suicide = (int *) 0xdeadbabe;
+  int* suicide = (int *) 0x1deadbabe;
   tyche_debug(v);
   *suicide = v;
 }
